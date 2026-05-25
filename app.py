@@ -25,14 +25,15 @@ def získej_gemini_client():
     
     for i, klic in enumerate(seznam_klicu):
         try:
-            # Zkusíme vytvořit klienta a poslat cvičný mini-dotaz pro ověření kvóty
+            # Zkusíme vytvořit klienta
             klient = genai.Client(api_key=klic)
-            # Použijeme nejmenší model jen na rychlé ověření, zda klíč žije
+            
+            # OPRAVA: Použijeme standardní 'gemini-2.5-flash' pro ověření klíče
             klient.models.generate_content(
-                model='gemini-2.5-flash-8b',
+                model='gemini-2.5-flash',
                 contents='ping',
             )
-            # Pokud ping prošel, klíč je v pořádku a vracíme klienta
+            # Pokud ping prošel, klíč má volnou kvótu a funguje
             return klient
         except errors.APIError as e:
             if e.code == 429:
@@ -47,17 +48,15 @@ def získej_gemini_client():
     return None
 
 # --- AI LOGIKA PRO GENEROVÁNÍ ---
-def generuj_z_ai(prompt, pouzij_8b=False):
+def generuj_z_ai(prompt):
     """
-    Zabezpečí vygenerování textu z AI s využitím rotace klíčů a fallbacku modelu.
+    Zabezpečí vygenerování textu z AI s využitím rotace klíčů.
     """
     klient = získej_gemini_client()
     if not klient:
         return None
         
-    # Volba modelu (pokud chceme explicitně 8b, nebo jako fallback)
-    hlavni_model = 'gemini-2.5-flash-8b' if pouzij_8b else 'gemini-2.5-flash'
-    zalozni_model = 'gemini-2.5-flash-8b'
+    hlavni_model = 'gemini-2.5-flash'
     
     try:
         response = klient.models.generate_content(
@@ -66,19 +65,7 @@ def generuj_z_ai(prompt, pouzij_8b=False):
         )
         return response.text
     except errors.APIError as e:
-        # Fallback na menší model v rámci funkčního klíče (např. při chybě 503 přetížení)
-        if e.code == 503 and hlavni_model != zalozni_model:
-            st.info("Hlavní model je přetížený, zkouším úspornější model...")
-            try:
-                response = klient.models.generate_content(
-                    model=zalozni_model,
-                    contents=prompt,
-                )
-                return response.text
-            except Exception as e_sub:
-                st.error(f"Selhal i záložní model: {e_sub}")
-        else:
-            st.error(f"Chyba při generování obsahu: {e}")
+        st.error(f"Chyba při generování obsahu: {e}")
     return None
 
 # --- LOGIKA PRO ODESÍLÁNÍ E-MAILU ---
@@ -185,8 +172,8 @@ if "navrhnute_menu" in st.session_state:
             if vysledek_recepty:
                 st.session_state["vygenerovany_recept"] = vysledek_recepty
                 
-                # Odeslání na e-mail
-                uspech = odesli_email("🍳 Nové recepty na tento týden!", vyslecepty)
+                # OPRAVA: Správný název proměnné vysledek_recepty
+                uspech = odesli_email("🍳 Nové recepty na tento týden!", vysledek_recepty)
                 if uspech:
                     st.balloons()
                     st.success("🎉 Recepty byly úspěšně vygenerovány a odeslány na rodinný e-mail!")
