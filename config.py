@@ -22,7 +22,7 @@ SUROVINY_KATALOG = {
         "Žampiony / lesní houby", "Mražená zeleninová směs", "Fazole (v konzervě/suché)", "Čočka (červená/hnědá)", "Cizrna"
     ],
     "🍚 Přílohy": [
-        "Brambory", "Těstoviny (špagety/vřetena...)", "Rýže (jasmínová/basmati)", "Knoflíky / houskový knedlík",
+        "Vařené brambory", "Bramborová kaše", "Těstoviny (špagety/vřetena...)", "Rýže (jasmínová/basmati)", "Knoflíky / houskový knedlík",
         "Bramborový knedlík", "Kuskus", "Bulgur", "Tarhoňa", "Tortilly", "Pečivo (chléb/housky)"
     ],
     "🥫 Ostatní zásoby a špajz": [
