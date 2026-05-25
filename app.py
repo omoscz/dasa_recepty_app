@@ -12,36 +12,36 @@ import config
 st.set_page_config(page_title="Dáša Recepty App", page_icon="🍳", layout="centered")
 
 
-# --- ROTACE API KLÍČŮ ---
-def získej_gemini_client():
+# Modely v pořadí preference — při přetížení (503) se zkouší další
+MODELY = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+
+
+def generuj_z_ai(prompt):
     if "GEMINI_KEYS" not in st.secrets:
         st.error("V Secrets chybí proměnná GEMINI_KEYS!")
         return None
 
     for i, klic in enumerate(st.secrets["GEMINI_KEYS"]):
-        try:
-            klient = genai.Client(api_key=klic)
-            klient.models.generate_content(model="gemini-2.5-flash", contents="ping")
-            return klient
-        except errors.APIError as e:
-            if e.code == 429:
-                st.warning(f"⚠️ API klíč č. {i + 1} je vyčerpaný (Limit 429). Přepínám na záložní...")
-            else:
-                st.error(f"Chyba u API klíče č. {i + 1}: {e}")
+        klient = genai.Client(api_key=klic)
+        for model in MODELY:
+            try:
+                response = klient.models.generate_content(model=model, contents=prompt)
+                return response.text
+            except errors.APIError as e:
+                if e.code == 429:
+                    st.warning(f"⚠️ API klíč č. {i + 1} má vyčerpaný limit. Přepínám na záložní klíč...")
+                    break  # přejdi na další klíč
+                elif e.code == 503:
+                    st.warning(f"⚠️ Model {model} je přetížený. Zkouším záložní model...")
+                    continue  # přejdi na další model
+                elif e.code == 403:
+                    st.warning(f"⚠️ API klíč č. {i + 1} je neplatný. Přepínám na záložní klíč...")
+                    break  # přejdi na další klíč
+                else:
+                    st.error(f"Neočekávaná chyba u klíče č. {i + 1}, modelu {model}: {e}")
+                    break
 
-    st.error("❌ Všechny dostupné API klíče byly pro dnešek vyčerpány!")
-    return None
-
-
-def generuj_z_ai(prompt):
-    klient = získej_gemini_client()
-    if not klient:
-        return None
-    try:
-        response = klient.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-        return response.text
-    except errors.APIError as e:
-        st.error(f"Chyba při generování obsahu: {e}")
+    st.error("❌ Nepodařilo se vygenerovat obsah. Zkus to prosím za chvíli.")
     return None
 
 
