@@ -164,7 +164,7 @@ vybrane_suroviny = []
 for kategorie, polozky in config.SUROVINY_KATALOG.items():
     with st.expander(kategorie):
         for polozka in polozky:
-            if st.checkbox(polozka, key=f"surovina_{polozka}"):
+            if st.checkbox(polozka, key=f"surovina_{kategorie}_{polozka}"):
                 vybrane_suroviny.append(polozka)
 
 # 2. Výběr stylu
@@ -175,7 +175,11 @@ with st.expander("🌍 Vybrat kulinářský styl / styl vaření"):
         if st.checkbox(styl, key=f"styl_{styl}"):
             vybrane_styly.append(styl)
 
-# 3. Generování přehledu 5 receptů
+# 3. Počet porcí
+st.subheader("3. Pro kolik porcí vařit?")
+pocet_porci = st.slider("Počet porcí", min_value=1, max_value=12, value=6)
+
+# 4. Generování přehledu 5 receptů
 if st.button("🚀 Vygenerovat návrhy jídel", type="primary"):
     if not vybrane_suroviny:
         st.warning("Vyber prosím alespoň jednu surovinu!")
@@ -187,6 +191,7 @@ if st.button("🚀 Vygenerovat návrhy jídel", type="primary"):
             prompt = config.PROMPT_PREHLED_SABLONA.format(
                 suroviny=suroviny_str,
                 styl=styl_str,
+                porce=pocet_porci,
             )
             vysledek = generuj_z_ai(prompt)
 
@@ -196,6 +201,7 @@ if st.button("🚀 Vygenerovat návrhy jídel", type="primary"):
                     st.session_state["prehled_receptu"] = recepty
                     st.session_state["vybrane_suroviny"] = suroviny_str
                     st.session_state["vybrane_styly"] = styl_str
+                    st.session_state["pocet_porci"] = pocet_porci
                     # Reset detailů a zobrazených karet při novém generování
                     st.session_state.pop("detail_receptu", None)
                     st.session_state["zobrazene_detaily"] = []
@@ -235,6 +241,7 @@ if "prehled_receptu" in st.session_state:
                             nazev_jidla=nazev,
                             suroviny=st.session_state.get("vybrane_suroviny", ""),
                             styl=st.session_state.get("vybrane_styly", ""),
+                            porce=st.session_state.get("pocet_porci", 6),
                         )
                         detail = generuj_z_ai(prompt_detail)
                         if detail:
