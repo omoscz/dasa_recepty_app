@@ -1,96 +1,90 @@
 import streamlit as st
-import os
 import smtplib
+import json
+import re
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from google import genai
 from google.genai import errors
 
-# Importujeme konfiguraci z config.py
 import config
 
 st.set_page_config(page_title="Dáša Recepty App", page_icon="🍳", layout="centered")
 
-# --- POMOCNÁ FUNKCE PRO ROTACI API KLÍČŮ ---
+
+# --- ROTACE API KLÍČŮ ---
 def získej_gemini_client():
-    """
-    Projede seznam klíčů v st.secrets a vrátí funkčního klienta.
-    Pokud klíč selže na limit 429, zkusí další.
-    """
     if "GEMINI_KEYS" not in st.secrets:
         st.error("V Secrets chybí proměnná GEMINI_KEYS!")
         return None
 
-    seznam_klicu = st.secrets["GEMINI_KEYS"]
-    
-    for i, klic in enumerate(seznam_klicu):
+    for i, klic in enumerate(st.secrets["GEMINI_KEYS"]):
         try:
-            # Zkusíme vytvořit klienta
             klient = genai.Client(api_key=klic)
-            
-            # OPRAVA: Použijeme standardní 'gemini-2.5-flash' pro ověření klíče
-            klient.models.generate_content(
-                model='gemini-2.5-flash',
-                contents='ping',
-            )
-            # Pokud ping prošel, klíč má volnou kvótu a funguje
+            klient.models.generate_content(model="gemini-2.5-flash", contents="ping")
             return klient
         except errors.APIError as e:
             if e.code == 429:
-                # Klíč je vyčerpaný, vypíšeme varování a smyčka zkusí další klíč
-                st.warning(f"⚠️ API klíč č. {i+1} je vyčerpaný (Limit 429). Přepínám na záložní...")
-                continue
+                st.warning(f"⚠️ API klíč č. {i + 1} je vyčerpaný (Limit 429). Přepínám na záložní...")
             else:
-                st.error(f"Chyba u API klíče č. {i+1}: {e}")
-                continue
-                
+                st.error(f"Chyba u API klíče č. {i + 1}: {e}")
+
     st.error("❌ Všechny dostupné API klíče byly pro dnešek vyčerpány!")
     return None
 
-# --- AI LOGIKA PRO GENEROVÁNÍ ---
+
 def generuj_z_ai(prompt):
-    """
-    Zabezpečí vygenerování textu z AI s využitím rotace klíčů.
-    """
     klient = získej_gemini_client()
     if not klient:
         return None
-        
-    hlavni_model = 'gemini-2.5-flash'
-    
     try:
-        response = klient.models.generate_content(
-            model=hlavni_model,
-            contents=prompt,
-        )
+        response = klient.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         return response.text
     except errors.APIError as e:
         st.error(f"Chyba při generování obsahu: {e}")
     return None
 
-# --- LOGIKA PRO ODESÍLÁNÍ E-MAILU ---
-def odesli_email(predmet, html_obsah):
+
+def parsuj_recepty_json(text):
+    # Odstraníme markdown code fences pokud jsou přítomny
+    text = re.sub(r"```(?:json)?\s*", "", text).strip()
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    return None
+
+
+def odesli_email(predmet, obsah_md):
     odesilatel = config.EMAIL_SENDER
     heslo = st.secrets.get("EMAIL_PASSWORD", config.EMAIL_PASSWORD)
     prijemce = config.EMAIL_RECEIVER
 
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = predmet
-    msg['From'] = odesilatel
-    msg['To'] = prijemce
+    # Převod markdownu na čitelné HTML
+    html_obsah = obsah_md.replace("\n", "<br>")
 
-    # Převedeme čistý text na pěkné HTML pro e-mailové klienty
     html_telo = f"""
     <html>
       <body style="font-family: Arial, sans-serif; color: #333333; line-height: 1.6;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #dddddd; border-radius: 8px;">
-            {html_obsah.replace('### ', '<h3 style="color: #2e7d32; border-bottom: 1px solid #eeeeee; padding-bottom: 5px; margin-top: 20px;">').replace('###', '').replace('\n', '<br>')}
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px;
+                    border: 1px solid #dddddd; border-radius: 8px;">
+          {html_obsah}
         </div>
       </body>
     </html>
     """
-    
-    msg.attach(MIMEText(html_telo, 'html', 'utf-8'))
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = predmet
+    msg["From"] = odesilatel
+    msg["To"] = prijemce
+    msg.attach(MIMEText(html_telo, "html", "utf-8"))
 
     try:
         with smtplib.SMTP_SSL(config.SMTP_SERVER, config.SMTP_PORT) as server:
@@ -101,13 +95,13 @@ def odesli_email(predmet, html_obsah):
         st.error(f"E-mail se nepodařilo odeslat: {e}")
         return False
 
-# --- UŽIVATELSKÉ ROZHRANÍ (STREAMLIT) ---
+
+# --- UI ---
 st.title("🍳 Rodinné recepty pro Dášu")
-st.write("Vyber akční suroviny a styl, vygeneruj menu a pošli recepty přímo na e-mail.")
+st.write("Vyber akční suroviny a styl, vygeneruj návrhy jídel a pošli oblíbený recept na e-mail.")
 
-# 1. Výběr surovin podle kategorií
+# 1. Výběr surovin
 st.subheader("1. Co máme v akci / v lednici?")
-
 vybrane_suroviny = []
 for kategorie, polozky in config.SUROVINY_KATALOG.items():
     with st.expander(kategorie):
@@ -115,70 +109,93 @@ for kategorie, polozky in config.SUROVINY_KATALOG.items():
             if st.checkbox(polozka, key=f"surovina_{polozka}"):
                 vybrane_suroviny.append(polozka)
 
-# 2. Výběr kulinářského stylu (zabaleno do expanderu)
+# 2. Výběr stylu
 st.subheader("2. Na jakou kuchyni máte chuť?")
 vybrane_styly = []
-
 with st.expander("🌍 Vybrat kulinářský styl / styl vaření"):
     for styl in config.KULINARSKE_STYLY:
         if st.checkbox(styl, key=f"styl_{styl}"):
             vybrane_styly.append(styl)
 
-# 3. Tlačítko pro generování jídelníčku
+# 3. Generování přehledu 5 receptů
 if st.button("🚀 Vygenerovat návrhy jídel", type="primary"):
     if not vybrane_suroviny:
         st.warning("Vyber prosím alespoň jednu surovinu!")
     else:
         with st.spinner("AI šéfkuchař vymýšlí menu..."):
-            # Sestavení promptu pro menu
             suroviny_str = ", ".join(vybrane_suroviny)
-            
-            # Pokud nevybere žádný styl, AI udělá pestrý mix
-            if vybrane_styly:
-                styl_str = ", ".join(vybrane_styly)
-            else:
-                styl_str = "libovolný pestrý mix (zkombinuj styly podle chuti)"
-            
-            prompt_menu = config.PROMPT_MENU_SABLONA.format(
-                suroviny=suroviny_str,
-                styl=styl_str
-            )
-            
-            vysledek_menu = generuj_z_ai(prompt_menu)
-            
-            if vysledek_menu:
-                st.session_state["navrhnute_menu"] = vysledek_menu
-                # Vymažeme staré recepty, aby se nenačítaly z minula
-                if "vygenerovany_recept" in st.session_state:
-                    del st.session_state["vygenerovany_recept"]
+            styl_str = ", ".join(vybrane_styly) if vybrane_styly else "libovolný pestrý mix"
 
-# Zobrazení návrhů jídel, pokud existují
-if "navrhnute_menu" in st.session_state:
-    st.success("✨ Návrh jídelníčku je připraven!")
-    st.markdown(st.session_state["navrhnute_menu"])
-    
-    st.write("---")
-    st.subheader("3. Chceš vygenerovat a poslat kompletní recepty?")
-    st.write("Pokud se ti menu líbí, kliknutím níže AI připraví detailní postupy a odešle je na e-mail.")
-    
-    if st.button("✉️ Vygenerovat recepty a odeslat na e-mail"):
-        with st.spinner("Generuji detailní postupy a posílám e-mail..."):
-            prompt_recepty = config.PROMPT_DETAIL_SABLONA.format(
-                menu=st.session_state["navrhnute_menu"]
+            prompt = config.PROMPT_PREHLED_SABLONA.format(
+                suroviny=suroviny_str,
+                styl=styl_str,
             )
-            
-            vysledek_recepty = generuj_z_ai(prompt_recepty)
-            
-            if vysledek_recepty:
-                st.session_state["vygenerovany_recept"] = vysledek_recepty
-                
-                # OPRAVA: Správný název proměnné vysledek_recepty
-                uspech = odesli_email("🍳 Nové recepty na tento týden!", vysledek_recepty)
-                if uspech:
-                    st.balloons()
-                    st.success("🎉 Recepty byly úspěšně vygenerovány a odeslány na rodinný e-mail!")
-                    
-# Zobrazení detailů receptů na stránce pro kontrolu
-if "vygenerovany_recept" in st.session_state:
-    with st.expander("👀 Zobrazit detail odeslaných receptů přímo zde"):
-        st.markdown(st.session_state["vygenerovany_recept"])
+            vysledek = generuj_z_ai(prompt)
+
+            if vysledek:
+                recepty = parsuj_recepty_json(vysledek)
+                if recepty:
+                    st.session_state["prehled_receptu"] = recepty
+                    st.session_state["vybrane_suroviny"] = suroviny_str
+                    st.session_state["vybrane_styly"] = styl_str
+                    # Reset detailů a zobrazených karet při novém generování
+                    st.session_state.pop("detail_receptu", None)
+                    st.session_state["zobrazene_detaily"] = []
+                else:
+                    st.error("Nepodařilo se zpracovat odpověď AI. Zkus to prosím znovu.")
+
+# 4. Zobrazení přehledu 5 receptů
+if "prehled_receptu" in st.session_state:
+    st.success("✨ Tady je 5 návrhů jídel — klikni na recept pro zobrazení detailu:")
+    st.write("---")
+
+    if "detail_receptu" not in st.session_state:
+        st.session_state["detail_receptu"] = {}
+    if "zobrazene_detaily" not in st.session_state:
+        st.session_state["zobrazene_detaily"] = []
+
+    for i, recept in enumerate(st.session_state["prehled_receptu"]):
+        nazev = recept.get("nazev", f"Recept {i + 1}")
+        popis = recept.get("popis", "")
+        dalsi = recept.get("dalsi_ingredience", [])
+
+        st.markdown(f"### {i + 1}. {nazev}")
+        st.write(popis)
+
+        if dalsi:
+            st.caption(f"🛒 Další potřebné ingredience: {', '.join(dalsi)}")
+        else:
+            st.caption("✅ Vystačíš si s vybranými surovinami!")
+
+        # Tlačítko pro zobrazení detailu
+        if i not in st.session_state["zobrazene_detaily"]:
+            if st.button(f"📖 Zobrazit celý recept", key=f"detail_btn_{i}"):
+                st.session_state["zobrazene_detaily"].append(i)
+                if i not in st.session_state["detail_receptu"]:
+                    with st.spinner(f"Generuji detailní recept pro „{nazev}"..."):
+                        prompt_detail = config.PROMPT_DETAIL_SABLONA.format(
+                            nazev_jidla=nazev,
+                            suroviny=st.session_state.get("vybrane_suroviny", ""),
+                            styl=st.session_state.get("vybrane_styly", ""),
+                        )
+                        detail = generuj_z_ai(prompt_detail)
+                        if detail:
+                            st.session_state["detail_receptu"][i] = detail
+
+        # Zobrazení detailu receptu
+        if i in st.session_state["zobrazene_detaily"] and i in st.session_state["detail_receptu"]:
+            with st.expander(f"📋 {nazev} — celý recept", expanded=True):
+                st.markdown(st.session_state["detail_receptu"][i])
+
+                st.write("---")
+                if st.button(f"✉️ Odeslat tento recept na e-mail", key=f"email_btn_{i}"):
+                    with st.spinner("Odesílám e-mail..."):
+                        uspech = odesli_email(
+                            f"🍳 Recept: {nazev}",
+                            st.session_state["detail_receptu"][i],
+                        )
+                        if uspech:
+                            st.balloons()
+                            st.success("🎉 Recept byl úspěšně odeslán na e-mail!")
+
+        st.write("---")
