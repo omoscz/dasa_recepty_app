@@ -46,7 +46,7 @@ KULINARSKE_STYLY = [
 SMTP_SERVER = "smtp.seznam.cz"
 SMTP_PORT = 465
 EMAIL_SENDER = "dasajidelnicek@seznam.cz"
-EMAIL_RECEIVER = "omos@email.cz"
+EMAIL_RECEIVER = "dady.89@seznam.cz"
 EMAIL_PASSWORD = ""
 
 # Prompt pro přehled 5 receptů – vrací čisté JSON pole
