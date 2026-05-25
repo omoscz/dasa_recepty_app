@@ -25,7 +25,7 @@ SUROVINY_KATALOG = {
         "Vařené brambory", "Bramborová kaše", "Těstoviny (špagety/vřetena...)", "Rýže (jasmínová/basmati)", "Knoflíky / houskový knedlík",
         "Bramborový knedlík", "Kuskus", "Bulgur", "Tarhoňa", "Tortilly", "Pečivo (chléb/housky)"
     ],
-    "🥫 Ostatní zásoby a špajz": [
+    "🥫 Ostatní": [
         "Rajčatové pyré / pasírovaná rajčata", "Rajčata v konzervě (krájená)", "Tuňák v konzervě",
         "Kokosové mléko", "Hořčice (plnotučná/dijonská)", "Kečup", "Sójová omáčka", "Solamyl / škrob",
         "Hladká mouka", "Polohrubá mouka", "Strouhanka", "Med", "Citrónová šťáva", "Olivový olej", "Slunečnicový olej"
