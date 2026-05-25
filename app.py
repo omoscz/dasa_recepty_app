@@ -128,13 +128,14 @@ for kategorie, polozky in config.SUROVINY_KATALOG.items():
             if st.checkbox(polozka, key=f"surovina_{polozka}"):
                 vybrane_suroviny.append(polozka)
 
-# 2. Výběr kulinářského stylu (předěláno na checkboxy)
+# 2. Výběr kulinářského stylu (zabaleno do expanderu)
 st.subheader("2. Na jakou kuchyni máte chuť?")
 vybrane_styly = []
 
-for styl in config.KULINARSKE_STYLY:
-    if st.checkbox(styl, key=f"styl_{styl}"):
-        vybrane_styly.append(styl)
+with st.expander("🌍 Vybrat kulinářský styl / styl vaření"):
+    for styl in config.KULINARSKE_STYLY:
+        if st.checkbox(styl, key=f"styl_{styl}"):
+            vybrane_styly.append(styl)
 
 # 3. Tlačítko pro generování jídelníčku
 if st.button("🚀 Vygenerovat návrhy jídel", type="primary"):
@@ -174,7 +175,7 @@ if "navrhnute_menu" in st.session_state:
     st.write("Pokud se ti menu líbí, kliknutím níže AI připraví detailní postupy a odešle je na e-mail.")
     
     if st.button("✉️ Vygenerovat recepty a odeslat na e-mail"):
-        with st.spinner("Generuji detailní postupy and posílám e-mail..."):
+        with st.spinner("Generuji detailní postupy a posílám e-mail..."):
             prompt_recepty = config.PROMPT_DETAIL_SABLONA.format(
                 menu=st.session_state["navrhnute_menu"]
             )
@@ -185,7 +186,7 @@ if "navrhnute_menu" in st.session_state:
                 st.session_state["vygenerovany_recept"] = vysledek_recepty
                 
                 # Odeslání na e-mail
-                uspech = odesli_email("🍳 Nové recepty na tento týden!", vysledek_recepty)
+                uspech = odesli_email("🍳 Nové recepty na tento týden!", vyslecepty)
                 if uspech:
                     st.balloons()
                     st.success("🎉 Recepty byly úspěšně vygenerovány a odeslány na rodinný e-mail!")
