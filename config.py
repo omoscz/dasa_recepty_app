@@ -33,7 +33,6 @@ SUROVINY_KATALOG = {
 }
 
 KULINARSKE_STYLY = [
-    "Pestrý mix (nechat na AI)",
     "Tradiční česká",
     "Italská / Středomořská",
     "Asijská (rychlá pánvička)",
