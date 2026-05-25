@@ -114,7 +114,7 @@ def odesli_email(predmet, html_obsah):
         st.error(f"E-mail se nepodařilo odeslat: {e}")
         return False
 
-# --- uUŽIVATELSKÉ ROZHRANÍ (STREAMLIT) ---
+# --- UŽIVATELSKÉ ROZHRANÍ (STREAMLIT) ---
 st.title("🍳 Rodinné recepty pro Dášu")
 st.write("Vyber akční suroviny a styl, vygeneruj menu a pošli recepty přímo na e-mail.")
 
@@ -128,9 +128,13 @@ for kategorie, polozky in config.SUROVINY_KATALOG.items():
             if st.checkbox(polozka, key=f"surovina_{polozka}"):
                 vybrane_suroviny.append(polozka)
 
-# 2. Výběr kulinářského stylu
+# 2. Výběr kulinářského stylu (předěláno na checkboxy)
 st.subheader("2. Na jakou kuchyni máte chuť?")
-vybrany_styl = st.selectbox("Vyber styl (volitelné):", config.KULINARSKE_STYLY)
+vybrane_styly = []
+
+for styl in config.KULINARSKE_STYLY:
+    if st.checkbox(styl, key=f"styl_{styl}"):
+        vybrane_styly.append(styl)
 
 # 3. Tlačítko pro generování jídelníčku
 if st.button("🚀 Vygenerovat návrhy jídel", type="primary"):
@@ -140,7 +144,12 @@ if st.button("🚀 Vygenerovat návrhy jídel", type="primary"):
         with st.spinner("AI šéfkuchař vymýšlí menu..."):
             # Sestavení promptu pro menu
             suroviny_str = ", ".join(vybrane_suroviny)
-            styl_str = vybrany_styl if vybrany_styl != "Pestrý mix (nechat na AI)" else "libovolný pestrý mix"
+            
+            # Pokud nevybere žádný styl, AI udělá pestrý mix
+            if vybrane_styly:
+                styl_str = ", ".join(vybrane_styly)
+            else:
+                styl_str = "libovolný pestrý mix (zkombinuj styly podle chuti)"
             
             prompt_menu = config.PROMPT_MENU_SABLONA.format(
                 suroviny=suroviny_str,
@@ -165,7 +174,7 @@ if "navrhnute_menu" in st.session_state:
     st.write("Pokud se ti menu líbí, kliknutím níže AI připraví detailní postupy a odešle je na e-mail.")
     
     if st.button("✉️ Vygenerovat recepty a odeslat na e-mail"):
-        with st.spinner("Generuji detailní postupy a posílám e-mail..."):
+        with st.spinner("Generuji detailní postupy and posílám e-mail..."):
             prompt_recepty = config.PROMPT_DETAIL_SABLONA.format(
                 menu=st.session_state["navrhnute_menu"]
             )
