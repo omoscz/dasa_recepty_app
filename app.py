@@ -172,7 +172,7 @@ if "prehled_receptu" in st.session_state:
             if st.button(f"📖 Zobrazit celý recept", key=f"detail_btn_{i}"):
                 st.session_state["zobrazene_detaily"].append(i)
                 if i not in st.session_state["detail_receptu"]:
-                    with st.spinner(f"Generuji detailní recept pro „{nazev}"..."):
+                    with st.spinner(f"Generuji detailní recept pro '{nazev}'..."):
                         prompt_detail = config.PROMPT_DETAIL_SABLONA.format(
                             nazev_jidla=nazev,
                             suroviny=st.session_state.get("vybrane_suroviny", ""),
