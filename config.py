@@ -49,10 +49,10 @@ EMAIL_RECEIVER = "dady.89@seznam.cz"
 EMAIL_PASSWORD = ""
 
 # Prompt pro přehled 5 receptů – vrací čisté JSON pole
-PROMPT_PREHLED_SABLONA = """Jsi šéfkuchař. Navrhni přesně 5 receptů pro 4člennou rodinu (2 dospělí + 2 děti).
+PROMPT_PREHLED_SABLONA = """Jsi šéfkuchař. Navrhni přesně 5 receptů.
 Dostupné ingredience: {suroviny}.
 Styl kuchyně: {styl}.
-Porce uprav tak, aby zbyly 2-3 porce na obědy do práce (cca 6 porcí celkem).
+Každý recept připrav na {porce} porcí.
 
 Odpověz POUZE validním JSON polem bez jakéhokoliv dalšího textu nebo markdown formátování.
 Každý objekt v poli musí mít přesně tyto klíče:
@@ -67,7 +67,7 @@ PROMPT_DETAIL_SABLONA = """Vytvoř detailní recept pro jídlo: {nazev_jidla}
 
 Dostupné ingredience uživatele: {suroviny}
 Styl kuchyně: {styl}
-Porce: pro 4 osoby + 2-3 porce na obědy (celkem cca 6 porcí)
+Porce: {porce}
 
 Struktura receptu:
 ### {nazev_jidla}
