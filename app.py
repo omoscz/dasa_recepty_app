@@ -61,20 +61,78 @@ def parsuj_recepty_json(text):
     return None
 
 
+def _bold(text):
+    return re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", text)
+
+
+def markdown_na_html(text):
+    html = []
+    in_ul = False
+    in_ol = False
+
+    def zavri_listy():
+        nonlocal in_ul, in_ol
+        if in_ul:
+            html.append("</ul>")
+            in_ul = False
+        if in_ol:
+            html.append("</ol>")
+            in_ol = False
+
+    for line in text.split("\n"):
+        s = line.strip()
+
+        if not s:
+            zavri_listy()
+            continue
+
+        if s.startswith("### "):
+            zavri_listy()
+            html.append(
+                f'<h3 style="color:#2e7d32;margin:20px 0 6px;border-bottom:1px solid #eee;padding-bottom:4px">'
+                f"{_bold(s[4:])}</h3>"
+            )
+        elif s.startswith("## "):
+            zavri_listy()
+            html.append(
+                f'<h2 style="color:#1a5276;margin:24px 0 8px">{_bold(s[3:])}</h2>'
+            )
+        elif re.match(r"^\d+\.\s", s):
+            if in_ul:
+                html.append("</ul>")
+                in_ul = False
+            if not in_ol:
+                html.append('<ol style="padding-left:22px;margin:6px 0">')
+                in_ol = True
+            content = re.sub(r"^\d+\.\s", "", s)
+            html.append(f'<li style="margin:4px 0">{_bold(content)}</li>')
+        elif s.startswith("* ") or s.startswith("- "):
+            if in_ol:
+                html.append("</ol>")
+                in_ol = False
+            if not in_ul:
+                html.append('<ul style="padding-left:20px;margin:6px 0">')
+                in_ul = True
+            html.append(f'<li style="margin:4px 0">{_bold(s[2:])}</li>')
+        else:
+            zavri_listy()
+            html.append(f'<p style="margin:6px 0">{_bold(s)}</p>')
+
+    zavri_listy()
+    return "\n".join(html)
+
+
 def odesli_email(predmet, obsah_md):
     odesilatel = config.EMAIL_SENDER
     heslo = st.secrets.get("EMAIL_PASSWORD", config.EMAIL_PASSWORD)
     prijemce = config.EMAIL_RECEIVER
 
-    # Převod markdownu na čitelné HTML
-    html_obsah = obsah_md.replace("\n", "<br>")
-
     html_telo = f"""
     <html>
-      <body style="font-family: Arial, sans-serif; color: #333333; line-height: 1.6;">
-        <div style="max-width: 600px; margin: 0 auto; padding: 20px;
-                    border: 1px solid #dddddd; border-radius: 8px;">
-          {html_obsah}
+      <body style="font-family:Arial,sans-serif;color:#333333;line-height:1.65;background:#f9f9f9">
+        <div style="max-width:600px;margin:0 auto;padding:28px 24px;
+                    background:#ffffff;border:1px solid #dddddd;border-radius:10px">
+          {markdown_na_html(obsah_md)}
         </div>
       </body>
     </html>

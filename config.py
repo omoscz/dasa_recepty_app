@@ -58,7 +58,7 @@ Porce uprav tak, aby zbyly 2-3 porce na obědy do práce (cca 6 porcí celkem).
 Odpověz POUZE validním JSON polem bez jakéhokoliv dalšího textu nebo markdown formátování.
 Každý objekt v poli musí mít přesně tyto klíče:
 - "nazev": název jídla (string)
-- "popis": krátký popis o co se jedná, max 2 věty (string)
+- "popis": krátký popis o co se jedná, cca 3 věty — co to je, z čeho se to dělá a proč to stojí za to uvařit (string)
 - "dalsi_ingredience": seznam dalších ingrediencí potřebných nad rámec dostupných (pole stringů, může být prázdné)
 
 Formát: [{{"nazev": "...", "popis": "...", "dalsi_ingredience": ["...", "..."]}}, ...]"""
