@@ -2,7 +2,6 @@ import streamlit as st
 import smtplib
 import json
 import re
-import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from google import genai
@@ -13,38 +12,28 @@ import config
 st.set_page_config(page_title="Dáša Recepty App", page_icon="🍳", layout="centered")
 
 
-# Modely v pořadí preference — při přetížení (503) se zkouší další
-MODELY = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+MODEL = "gemini-1.5-flash"
 
 
 def generuj_z_ai(prompt):
-    if "GEMINI_KEYS" not in st.secrets:
-        st.error("V Secrets chybí proměnná GEMINI_KEYS!")
+    if "GEMINI_KEY" not in st.secrets:
+        st.error("V Secrets chybí proměnná GEMINI_KEY!")
         return None
 
-    for i, klic in enumerate(st.secrets["GEMINI_KEYS"]):
-        klient = genai.Client(api_key=klic)
-        for model in MODELY:
-            try:
-                response = klient.models.generate_content(model=model, contents=prompt)
-                return response.text
-            except errors.APIError as e:
-                if e.code == 429:
-                    st.warning(f"⚠️ API klíč č. {i + 1} má vyčerpaný limit. Přepínám na záložní klíč...")
-                    time.sleep(2)  # krátká pauza před dalším klíčem (RPM ochrana)
-                    break  # přejdi na další klíč
-                elif e.code == 503:
-                    st.warning(f"⚠️ Model {model} je přetížený. Zkouším záložní model...")
-                    continue  # přejdi na další model
-                elif e.code == 403:
-                    st.warning(f"⚠️ API klíč č. {i + 1} je neplatný. Přepínám na záložní klíč...")
-                    break  # přejdi na další klíč
-                else:
-                    st.error(f"Neočekávaná chyba u klíče č. {i + 1}, modelu {model}: {e}")
-                    break
-
-    st.error("❌ Nepodařilo se vygenerovat obsah. Zkus to prosím za chvíli.")
-    return None
+    klient = genai.Client(api_key=st.secrets["GEMINI_KEY"])
+    try:
+        response = klient.models.generate_content(model=MODEL, contents=prompt)
+        return response.text
+    except errors.APIError as e:
+        if e.code == 429:
+            st.error("⚠️ Byl překročen denní limit API. Zkus to prosím zítra.")
+        elif e.code == 503:
+            st.error("⚠️ Služba je momentálně přetížená. Zkus to prosím za chvíli.")
+        elif e.code == 403:
+            st.error("⚠️ API klíč je neplatný. Zkontroluj nastavení Secrets.")
+        else:
+            st.error(f"Neočekávaná chyba: {e}")
+        return None
 
 
 def parsuj_recepty_json(text):
