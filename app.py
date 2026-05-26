@@ -12,7 +12,7 @@ import config
 st.set_page_config(page_title="Dáša Recepty App", page_icon="🍳", layout="centered")
 
 
-MODEL = "gemini-1.5-flash"
+MODEL = "gemini-2.0-flash"
 
 
 def generuj_z_ai(prompt):
