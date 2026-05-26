@@ -2,6 +2,7 @@ import streamlit as st
 import smtplib
 import json
 import re
+import time
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from google import genai
@@ -30,6 +31,7 @@ def generuj_z_ai(prompt):
             except errors.APIError as e:
                 if e.code == 429:
                     st.warning(f"⚠️ API klíč č. {i + 1} má vyčerpaný limit. Přepínám na záložní klíč...")
+                    time.sleep(2)  # krátká pauza před dalším klíčem (RPM ochrana)
                     break  # přejdi na další klíč
                 elif e.code == 503:
                     st.warning(f"⚠️ Model {model} je přetížený. Zkouším záložní model...")
