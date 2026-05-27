@@ -12,18 +12,22 @@ SUROVINY_KATALOG = {
         "Losos (filet)", "Pstruh", "Treska / filé", "Uzené maso", "Slanina / špek", "Klobásy / párky"
     ],
     "🥛 Mléčné výrobky a vejce": [
-        "Vejce", "Máslo", "Cihla Eidam / Gouda", "Hermelín / Camembert", "Niva / modrý sýr", "Mozzarella",
-        "Parmazán / Grana Padano", "Tvaroh (měkký/tvrdý)", "Smetana na vaření (12%)", "Smetana ke šlehání (31%+)",
-        "Zakysaná smetana", "Bílý jogurt / Skyr", "Zakysané podmáslí / kefír", "Tavený sýr", "Feta / Balkánský sýr"
+        "Bílý jogurt / Skyr", "Cihla Eidam / Gouda", "Feta / Balkánský sýr", "Hermelín / Camembert",
+        "Máslo", "Mozzarella", "Niva / modrý sýr", "Parmazán / Grana Padano",
+        "Smetana ke šlehání (31%+)", "Smetana na vaření (12%)", "Tavený sýr", "Tvaroh (měkký/tvrdý)",
+        "Vejce", "Zakysaná smetana", "Zakysané podmáslí / kefír"
     ],
     "🥦 Zelenina, houby a luštěniny": [
-        "Cibule (žlutá/červená)", "Česnek", "Brambory", "Mrkev", "Petržel / Celer", "Rajčata", "Paprika",
-        "Okurka", "Cuketa", "Lilek", "Brokolice", "Květák", "Špenát (čerstvý/mražený)", "Pórek", "Jarní cibulka",
-        "Žampiony / lesní houby", "Mražená zeleninová směs", "Fazole (v konzervě/suché)", "Čočka (červená/hnědá)", "Cizrna"
+        "Brambory", "Brokolice", "Cibule (žlutá/červená)", "Cizrna", "Cuketa",
+        "Česnek", "Čočka (červená/hnědá)", "Fazole (v konzervě/suché)", "Jarní cibulka",
+        "Květák", "Lilek", "Mražená zeleninová směs", "Mrkev", "Okurka",
+        "Paprika", "Petržel / Celer", "Pórek", "Rajčata",
+        "Špenát (čerstvý/mražený)", "Žampiony / lesní houby"
     ],
     "🍚 Přílohy": [
-        "Vařené brambory", "Bramborová kaše", "Těstoviny (špagety/vřetena...)", "Rýže (jasmínová/basmati)", "Knoflíky / houskový knedlík",
-        "Bramborový knedlík", "Kuskus", "Bulgur", "Tarhoňa", "Tortilly", "Pečivo (chléb/housky)"
+        "Vařené brambory", "Bramborová kaše", "Těstoviny (špagety/vřetena...)", "Rýže (jasmínová/basmati)",
+        "Houskový knedlík", "Bramborový knedlík", "Hranolky", "Krokety",
+        "Kuskus", "Bulgur", "Tarhoňa", "Tortilly", "Pečivo (chléb/housky)"
     ],
     "🥫 Ostatní": [
         "Rajčatové pyré / pasírovaná rajčata", "Rajčata v konzervě (krájená)", "Tuňák v konzervě",
