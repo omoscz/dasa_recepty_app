@@ -217,6 +217,16 @@ if "prehled_receptu" in st.session_state:
         st.markdown(f"### {i + 1}. {nazev}")
         st.write(popis)
 
+        nutri = recept.get("nutricni_hodnoty", {})
+        if nutri:
+            st.markdown(
+                f"🔥 **{nutri.get('kcal', '?')} kcal** &nbsp;|&nbsp; "
+                f"💪 **{nutri.get('bílkoviny', '?')} bílkovin** &nbsp;|&nbsp; "
+                f"🌾 **{nutri.get('sacharidy', '?')} sacharidů** &nbsp;|&nbsp; "
+                f"🫒 **{nutri.get('tuky', '?')} tuků**",
+                unsafe_allow_html=True
+            )
+
         if dalsi:
             st.caption(f"🛒 Další potřebné ingredience: {', '.join(dalsi)}")
         else:
