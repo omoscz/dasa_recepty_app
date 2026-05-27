@@ -12,7 +12,7 @@ import config
 st.set_page_config(page_title="Dáša Recepty App", page_icon="🍳", layout="centered")
 
 
-MODEL = "gemini-2.0-flash"
+MODEL = "gemini-2.5-flash"
 
 
 def generuj_z_ai(prompt):
@@ -25,7 +25,14 @@ def generuj_z_ai(prompt):
         response = klient.models.generate_content(model=MODEL, contents=prompt)
         return response.text
     except errors.APIError as e:
-        st.error(f"🔍 DEBUG — kód: {e.code} | zpráva: {e}")
+        if e.code == 429:
+            st.error("⚠️ Byl překročen denní limit API. Zkus to prosím zítra.")
+        elif e.code == 503:
+            st.error("⚠️ Služba je momentálně přetížená. Zkus to prosím za chvíli.")
+        elif e.code == 403:
+            st.error("⚠️ API klíč je neplatný. Zkontroluj nastavení Secrets.")
+        else:
+            st.error(f"Neočekávaná chyba: {e}")
         return None
 
 
