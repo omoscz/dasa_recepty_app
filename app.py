@@ -12,7 +12,7 @@ import config
 st.set_page_config(page_title="Dáša Recepty App", page_icon="🍳", layout="centered")
 
 
-MODEL = "gemini-2.5-flash"
+MODELY = ["gemini-2.5-flash-lite", "gemini-2.5-flash"]
 
 
 def generuj_z_ai(prompt):
@@ -21,19 +21,25 @@ def generuj_z_ai(prompt):
         return None
 
     klient = genai.Client(api_key=st.secrets["GEMINI_KEY"])
-    try:
-        response = klient.models.generate_content(model=MODEL, contents=prompt)
-        return response.text
-    except errors.APIError as e:
-        if e.code == 429:
-            st.error("⚠️ Byl překročen denní limit API. Zkus to prosím zítra.")
-        elif e.code == 503:
-            st.error("⚠️ Služba je momentálně přetížená. Zkus to prosím za chvíli.")
-        elif e.code == 403:
-            st.error("⚠️ API klíč je neplatný. Zkontroluj nastavení Secrets.")
-        else:
-            st.error(f"Neočekávaná chyba: {e}")
-        return None
+    for model in MODELY:
+        try:
+            response = klient.models.generate_content(model=model, contents=prompt)
+            return response.text
+        except errors.APIError as e:
+            if e.code == 429:
+                st.warning(f"⚠️ Model {model} má vyčerpaný limit. Zkouším záložní model...")
+            elif e.code == 404:
+                st.warning(f"⚠️ Model {model} není dostupný. Zkouším záložní model... (DEBUG kód: {e.code})")
+            elif e.code == 503:
+                st.warning(f"⚠️ Model {model} je přetížený. Zkouším záložní model...")
+            elif e.code == 403:
+                st.error("⚠️ API klíč je neplatný. Zkontroluj nastavení Secrets.")
+                return None
+            else:
+                st.warning(f"⚠️ Neočekávaná chyba u modelu {model} (DEBUG: {e.code} — {e}). Zkouším záložní...")
+
+    st.error("❌ Všechny modely selhaly. Zkus to prosím za chvíli.")
+    return None
 
 
 def parsuj_recepty_json(text):
