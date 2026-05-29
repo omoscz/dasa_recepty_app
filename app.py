@@ -26,17 +26,11 @@ def generuj_z_ai(prompt):
             response = klient.models.generate_content(model=model, contents=prompt)
             return response.text
         except errors.APIError as e:
-            if e.code == 429:
-                st.warning(f"⚠️ Model {model} má vyčerpaný limit. Zkouším záložní model...")
-            elif e.code == 404:
-                st.warning(f"⚠️ Model {model} není dostupný. Zkouším záložní model... (DEBUG kód: {e.code})")
-            elif e.code == 503:
-                st.warning(f"⚠️ Model {model} je přetížený. Zkouším záložní model...")
-            elif e.code == 403:
+            if e.code == 403:
                 st.error("⚠️ API klíč je neplatný. Zkontroluj nastavení Secrets.")
                 return None
             else:
-                st.warning(f"⚠️ Neočekávaná chyba u modelu {model} (DEBUG: {e.code} — {e}). Zkouším záložní...")
+                st.warning(f"⚠️ Přepínám na záložní model... [{e.code}]")
 
     st.error("❌ Všechny modely selhaly. Zkus to prosím za chvíli.")
     return None
