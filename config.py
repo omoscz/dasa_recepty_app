@@ -49,6 +49,7 @@ KULINARSKE_STYLY = [
 PECENI_TYPY_DEZERTY = [
     "Bábovka",
     "Brownies",
+    "Buchta na plech",
     "Bublanina",
     "Buchty",
     "Cheesecake",
@@ -179,6 +180,7 @@ PROMPT_PREHLED_PECENI_SABLONA = """Jsi zkušený cukrář. Navrhni přesně 10 r
 Typ dezertu / pečiva: {typ_dezertu}.
 Dostupné ovoce: {ovoce}.
 Ostatní dostupné suroviny: {ostatni}.
+Náročnost: {narocnost}.
 Dbej na variabilitu — různé postupy, textury, chutě a kombinace surovin.
 
 Odpověz POUZE validním JSON polem bez jakéhokoliv dalšího textu nebo markdown formátování.
@@ -186,9 +188,10 @@ Každý objekt v poli musí mít přesně tyto klíče:
 - "nazev": název dezertu (string)
 - "popis": krátký popis o co se jedná, cca 3 věty — co to je, z čeho se to dělá a proč to stojí za to upéct (string)
 - "dalsi_ingredience": seznam dalších ingrediencí potřebných nad rámec dostupných (pole stringů, může být prázdné)
+- "doba_pripravy": odhadovaná celková doba přípravy včetně pečení v minutách (číslo)
 - "nutricni_hodnoty": objekt s odhadovanými hodnotami na 1 kus / porci: "kcal" (číslo), "bílkoviny" (string "Xg"), "sacharidy" (string "Xg"), "tuky" (string "Xg")
 
-Formát: [{{"nazev": "...", "popis": "...", "dalsi_ingredience": ["...", "..."], "nutricni_hodnoty": {{"kcal": 250, "bílkoviny": "5g", "sacharidy": "35g", "tuky": "10g"}}}}, ...]"""
+Formát: [{{"nazev": "...", "popis": "...", "dalsi_ingredience": ["...", "..."], "doba_pripravy": 45, "nutricni_hodnoty": {{"kcal": 250, "bílkoviny": "5g", "sacharidy": "35g", "tuky": "10g"}}}}, ...]"""
 
 PROMPT_DETAIL_PECENI_SABLONA = """Vytvoř detailní recept na dezert: {nazev_jidla}
 
