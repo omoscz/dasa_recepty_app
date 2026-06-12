@@ -164,6 +164,10 @@ def zobraz_recepty(prehled_key, detail_key, zobrazene_key, prompt_detail_fn, pre
         st.markdown(f"### {i + 1}. {nazev}")
         st.write(popis)
 
+        doba = recept.get("doba_pripravy")
+        if doba:
+            st.markdown(f"⏱️ **Celková doba: {doba} min**", unsafe_allow_html=True)
+
         nutri = recept.get("nutricni_hodnoty", {})
         if nutri:
             st.markdown(
@@ -289,6 +293,13 @@ with tab_peceni:
             if st.checkbox(surovina, key=f"peceni_ostatni_{surovina}"):
                 vybrane_ostatni.append(surovina)
 
+    st.subheader("4. Náročnost")
+    narocnost = st.selectbox(
+        "Vyber náročnost receptů",
+        ["Bez omezení", "Snadné", "Střední", "Náročné"],
+        key="peceni_narocnost"
+    )
+
     if st.button("🚀 Vygenerovat návrhy dezertů", type="primary", key="btn_peceni"):
         if not vybrane_typy and not vybrane_ovoce and not vybrane_ostatni:
             st.warning("Vyber prosím alespoň jeden typ dezertu nebo surovinu!")
@@ -302,6 +313,7 @@ with tab_peceni:
                     typ_dezertu=typ_str,
                     ovoce=ovoce_str,
                     ostatni=ostatni_str,
+                    narocnost=narocnost,
                 ))
 
                 if vysledek:
