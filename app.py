@@ -37,7 +37,6 @@ def generuj_z_ai(prompt):
 
 
 def parsuj_recepty_json(text):
-    # Odstraníme markdown code fences pokud jsou přítomny
     text = re.sub(r"```(?:json)?\s*", "", text).strip()
     match = re.search(r"\[.*\]", text, re.DOTALL)
     if match:
@@ -145,71 +144,19 @@ def odesli_email(predmet, obsah_md):
         return False
 
 
-# --- UI ---
-st.title("🍳 Rodinné recepty pro Dášu")
-st.write("Vyber akční suroviny a styl, vygeneruj návrhy jídel a pošli oblíbený recept na e-mail.")
+def zobraz_recepty(prehled_key, detail_key, zobrazene_key, prompt_detail_fn, prefix_emailu):
+    if prehled_key not in st.session_state:
+        return
 
-# 1. Výběr surovin
-st.subheader("1. Co máme v akci / v lednici?")
-vybrane_suroviny = []
-for kategorie, polozky in config.SUROVINY_KATALOG.items():
-    with st.expander(kategorie):
-        for polozka in polozky:
-            if st.checkbox(polozka, key=f"surovina_{kategorie}_{polozka}"):
-                vybrane_suroviny.append(polozka)
-
-# 2. Výběr stylu
-st.subheader("2. Na jakou kuchyni máte chuť?")
-vybrane_styly = []
-with st.expander("🌍 Vybrat kulinářský styl / styl vaření"):
-    for styl in config.KULINARSKE_STYLY:
-        if st.checkbox(styl, key=f"styl_{styl}"):
-            vybrane_styly.append(styl)
-
-# 3. Počet porcí
-st.subheader("3. Pro kolik porcí vařit?")
-pocet_porci = st.slider("Počet porcí", min_value=1, max_value=12, value=6)
-
-# 4. Generování přehledu 5 receptů
-if st.button("🚀 Vygenerovat návrhy jídel", type="primary"):
-    if not vybrane_suroviny:
-        st.warning("Vyber prosím alespoň jednu surovinu!")
-    else:
-        with st.spinner("AI šéfkuchař vymýšlí menu..."):
-            suroviny_str = ", ".join(vybrane_suroviny)
-            styl_str = ", ".join(vybrane_styly) if vybrane_styly else "libovolný pestrý mix"
-
-            prompt = config.PROMPT_PREHLED_SABLONA.format(
-                suroviny=suroviny_str,
-                styl=styl_str,
-                porce=pocet_porci,
-            )
-            vysledek = generuj_z_ai(prompt)
-
-            if vysledek:
-                recepty = parsuj_recepty_json(vysledek)
-                if recepty:
-                    st.session_state["prehled_receptu"] = recepty
-                    st.session_state["vybrane_suroviny"] = suroviny_str
-                    st.session_state["vybrane_styly"] = styl_str
-                    st.session_state["pocet_porci"] = pocet_porci
-                    # Reset detailů a zobrazených karet při novém generování
-                    st.session_state.pop("detail_receptu", None)
-                    st.session_state["zobrazene_detaily"] = []
-                else:
-                    st.error("Nepodařilo se zpracovat odpověď AI. Zkus to prosím znovu.")
-
-# 4. Zobrazení přehledu 5 receptů
-if "prehled_receptu" in st.session_state:
-    st.success("✨ Tady je 5 návrhů jídel — klikni na recept pro zobrazení detailu:")
+    st.success("✨ Tady je 10 návrhů — klikni na recept pro zobrazení detailu:")
     st.write("---")
 
-    if "detail_receptu" not in st.session_state:
-        st.session_state["detail_receptu"] = {}
-    if "zobrazene_detaily" not in st.session_state:
-        st.session_state["zobrazene_detaily"] = []
+    if detail_key not in st.session_state:
+        st.session_state[detail_key] = {}
+    if zobrazene_key not in st.session_state:
+        st.session_state[zobrazene_key] = []
 
-    for i, recept in enumerate(st.session_state["prehled_receptu"]):
+    for i, recept in enumerate(st.session_state[prehled_key]):
         nazev = recept.get("nazev", f"Recept {i + 1}")
         popis = recept.get("popis", "")
         dalsi = recept.get("dalsi_ingredience", [])
@@ -232,36 +179,152 @@ if "prehled_receptu" in st.session_state:
         else:
             st.caption("✅ Vystačíš si s vybranými surovinami!")
 
-        # Tlačítko pro zobrazení detailu
-        if i not in st.session_state["zobrazene_detaily"]:
-            if st.button(f"📖 Zobrazit celý recept", key=f"detail_btn_{i}"):
-                st.session_state["zobrazene_detaily"].append(i)
-                if i not in st.session_state["detail_receptu"]:
+        if i not in st.session_state[zobrazene_key]:
+            if st.button("📖 Zobrazit celý recept", key=f"{zobrazene_key}_btn_{i}"):
+                st.session_state[zobrazene_key].append(i)
+                if i not in st.session_state[detail_key]:
                     with st.spinner(f"Generuji detailní recept pro '{nazev}'..."):
-                        prompt_detail = config.PROMPT_DETAIL_SABLONA.format(
-                            nazev_jidla=nazev,
-                            suroviny=st.session_state.get("vybrane_suroviny", ""),
-                            styl=st.session_state.get("vybrane_styly", ""),
-                            porce=st.session_state.get("pocet_porci", 6),
-                        )
-                        detail = generuj_z_ai(prompt_detail)
+                        detail = generuj_z_ai(prompt_detail_fn(nazev))
                         if detail:
-                            st.session_state["detail_receptu"][i] = detail
+                            st.session_state[detail_key][i] = detail
 
-        # Zobrazení detailu receptu
-        if i in st.session_state["zobrazene_detaily"] and i in st.session_state["detail_receptu"]:
+        if i in st.session_state[zobrazene_key] and i in st.session_state[detail_key]:
             with st.expander(f"📋 {nazev} — celý recept", expanded=True):
-                st.markdown(st.session_state["detail_receptu"][i])
-
+                st.markdown(st.session_state[detail_key][i])
                 st.write("---")
-                if st.button(f"✉️ Odeslat tento recept na e-mail", key=f"email_btn_{i}"):
+                if st.button("✉️ Odeslat tento recept na e-mail", key=f"{zobrazene_key}_email_{i}"):
                     with st.spinner("Odesílám e-mail..."):
-                        uspech = odesli_email(
-                            f"🍳 Recept: {nazev}",
-                            st.session_state["detail_receptu"][i],
-                        )
-                        if uspech:
+                        if odesli_email(f"{prefix_emailu} {nazev}", st.session_state[detail_key][i]):
                             st.balloons()
                             st.success("🎉 Recept byl úspěšně odeslán na e-mail!")
 
         st.write("---")
+
+
+# --- UI ---
+st.title("🍳 Rodinné recepty pro Dášu")
+st.write("Vyber suroviny a vygeneruj návrhy jídel nebo dezertů — pak pošli oblíbený recept na e-mail.")
+
+tab_jidla, tab_peceni = st.tabs(["🍳 Hlavní jídla", "🎂 Pečení"])
+
+# ==================== HLAVNÍ JÍDLA ====================
+with tab_jidla:
+    st.subheader("1. Co máme v akci / v lednici?")
+    vybrane_suroviny = []
+    for kategorie, polozky in config.SUROVINY_KATALOG.items():
+        with st.expander(kategorie):
+            for polozka in polozky:
+                if st.checkbox(polozka, key=f"surovina_{kategorie}_{polozka}"):
+                    vybrane_suroviny.append(polozka)
+
+    st.subheader("2. Na jakou kuchyni máte chuť?")
+    vybrane_styly = []
+    with st.expander("🌍 Vybrat kulinářský styl / styl vaření"):
+        for styl in config.KULINARSKE_STYLY:
+            if st.checkbox(styl, key=f"styl_{styl}"):
+                vybrane_styly.append(styl)
+
+    st.subheader("3. Pro kolik porcí vařit?")
+    pocet_porci = st.slider("Počet porcí", min_value=1, max_value=12, value=6)
+
+    if st.button("🚀 Vygenerovat návrhy jídel", type="primary", key="btn_jidla"):
+        if not vybrane_suroviny:
+            st.warning("Vyber prosím alespoň jednu surovinu!")
+        else:
+            with st.spinner("AI šéfkuchař vymýšlí menu..."):
+                suroviny_str = ", ".join(vybrane_suroviny)
+                styl_str = ", ".join(vybrane_styly) if vybrane_styly else "libovolný pestrý mix"
+
+                vysledek = generuj_z_ai(config.PROMPT_PREHLED_SABLONA.format(
+                    suroviny=suroviny_str,
+                    styl=styl_str,
+                    porce=pocet_porci,
+                ))
+
+                if vysledek:
+                    recepty = parsuj_recepty_json(vysledek)
+                    if recepty:
+                        st.session_state["jidla_prehled"] = recepty
+                        st.session_state["jidla_suroviny"] = suroviny_str
+                        st.session_state["jidla_styly"] = styl_str
+                        st.session_state["jidla_porce"] = pocet_porci
+                        st.session_state.pop("jidla_detail", None)
+                        st.session_state["jidla_zobrazene"] = []
+                    else:
+                        st.error("Nepodařilo se zpracovat odpověď AI. Zkus to prosím znovu.")
+
+    zobraz_recepty(
+        prehled_key="jidla_prehled",
+        detail_key="jidla_detail",
+        zobrazene_key="jidla_zobrazene",
+        prompt_detail_fn=lambda nazev: config.PROMPT_DETAIL_SABLONA.format(
+            nazev_jidla=nazev,
+            suroviny=st.session_state.get("jidla_suroviny", ""),
+            styl=st.session_state.get("jidla_styly", ""),
+            porce=st.session_state.get("jidla_porce", 6),
+        ),
+        prefix_emailu="🍳 Recept:",
+    )
+
+# ==================== PEČENÍ ====================
+with tab_peceni:
+    st.subheader("1. Co chceš péct?")
+    vybrane_typy = []
+    with st.expander("🎂 Typ dezertu / pečiva"):
+        for typ in config.PECENI_TYPY_DEZERTY:
+            if st.checkbox(typ, key=f"peceni_typ_{typ}"):
+                vybrane_typy.append(typ)
+
+    st.subheader("2. Jaké máš ovoce?")
+    vybrane_ovoce = []
+    with st.expander("🍓 Ovoce"):
+        for ovoce in config.PECENI_OVOCE:
+            if st.checkbox(ovoce, key=f"peceni_ovoce_{ovoce}"):
+                vybrane_ovoce.append(ovoce)
+
+    st.subheader("3. Ostatní suroviny")
+    vybrane_ostatni = []
+    with st.expander("🧁 Ostatní"):
+        for surovina in config.PECENI_OSTATNI:
+            if st.checkbox(surovina, key=f"peceni_ostatni_{surovina}"):
+                vybrane_ostatni.append(surovina)
+
+    if st.button("🚀 Vygenerovat návrhy dezertů", type="primary", key="btn_peceni"):
+        if not vybrane_typy and not vybrane_ovoce and not vybrane_ostatni:
+            st.warning("Vyber prosím alespoň jeden typ dezertu nebo surovinu!")
+        else:
+            with st.spinner("Cukrář vymýšlí dezerty..."):
+                typ_str = ", ".join(vybrane_typy) if vybrane_typy else "libovolný dezert"
+                ovoce_str = ", ".join(vybrane_ovoce) if vybrane_ovoce else "žádné"
+                ostatni_str = ", ".join(vybrane_ostatni) if vybrane_ostatni else "základní suroviny"
+
+                vysledek = generuj_z_ai(config.PROMPT_PREHLED_PECENI_SABLONA.format(
+                    typ_dezertu=typ_str,
+                    ovoce=ovoce_str,
+                    ostatni=ostatni_str,
+                ))
+
+                if vysledek:
+                    recepty = parsuj_recepty_json(vysledek)
+                    if recepty:
+                        st.session_state["peceni_prehled"] = recepty
+                        st.session_state["peceni_typ"] = typ_str
+                        st.session_state["peceni_ovoce"] = ovoce_str
+                        st.session_state["peceni_ostatni"] = ostatni_str
+                        st.session_state.pop("peceni_detail", None)
+                        st.session_state["peceni_zobrazene"] = []
+                    else:
+                        st.error("Nepodařilo se zpracovat odpověď AI. Zkus to prosím znovu.")
+
+    zobraz_recepty(
+        prehled_key="peceni_prehled",
+        detail_key="peceni_detail",
+        zobrazene_key="peceni_zobrazene",
+        prompt_detail_fn=lambda nazev: config.PROMPT_DETAIL_PECENI_SABLONA.format(
+            nazev_jidla=nazev,
+            typ_dezertu=st.session_state.get("peceni_typ", ""),
+            ovoce=st.session_state.get("peceni_ovoce", ""),
+            ostatni=st.session_state.get("peceni_ostatni", ""),
+        ),
+        prefix_emailu="🎂 Recept:",
+    )
