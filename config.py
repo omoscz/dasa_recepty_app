@@ -69,6 +69,7 @@ PECENI_TYPY_DEZERTY = [
     "Štrúdl / Závin",
     "Tiramisu",
     "Tvarohový koláč",
+    "Vánoční cukroví",
     "Vdolky",
 ]
 
