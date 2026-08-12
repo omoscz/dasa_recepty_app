@@ -2,6 +2,7 @@ import streamlit as st
 import smtplib
 import json
 import re
+import unicodedata
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from google import genai
@@ -49,6 +50,22 @@ def parsuj_recepty_json(text):
     except json.JSONDecodeError:
         pass
     return None
+
+
+def _bez_diakritiky(text):
+    return "".join(
+        c for c in unicodedata.normalize("NFD", str(text))
+        if unicodedata.category(c) != "Mn"
+    )
+
+
+def ziskej_nutri(nutri, klic, vychozi="?"):
+    # Najde hodnotu bez ohledu na diakritiku a velikost písmen v klíči
+    cil = _bez_diakritiky(klic).lower()
+    for k, v in nutri.items():
+        if _bez_diakritiky(k).lower() == cil:
+            return v
+    return vychozi
 
 
 def _bold(text):
@@ -171,10 +188,10 @@ def zobraz_recepty(prehled_key, detail_key, zobrazene_key, prompt_detail_fn, pre
         nutri = recept.get("nutricni_hodnoty", {})
         if nutri:
             st.markdown(
-                f"🔥 **{nutri.get('kcal', '?')} kcal** &nbsp;|&nbsp; "
-                f"💪 **{nutri.get('bílkoviny', '?')} bílkovin** &nbsp;|&nbsp; "
-                f"🌾 **{nutri.get('sacharidy', '?')} sacharidů** &nbsp;|&nbsp; "
-                f"🫒 **{nutri.get('tuky', '?')} tuků**",
+                f"🔥 **{ziskej_nutri(nutri, 'kcal')} kcal** &nbsp;|&nbsp; "
+                f"💪 **{ziskej_nutri(nutri, 'bilkoviny')} bílkovin** &nbsp;|&nbsp; "
+                f"🌾 **{ziskej_nutri(nutri, 'sacharidy')} sacharidů** &nbsp;|&nbsp; "
+                f"🫒 **{ziskej_nutri(nutri, 'tuky')} tuků**",
                 unsafe_allow_html=True
             )
 
@@ -185,12 +202,14 @@ def zobraz_recepty(prehled_key, detail_key, zobrazene_key, prompt_detail_fn, pre
 
         if i not in st.session_state[zobrazene_key]:
             if st.button("📖 Zobrazit celý recept", key=f"{zobrazene_key}_btn_{i}"):
-                st.session_state[zobrazene_key].append(i)
                 if i not in st.session_state[detail_key]:
                     with st.spinner(f"Generuji detailní recept pro '{nazev}'..."):
                         detail = generuj_z_ai(prompt_detail_fn(nazev))
                         if detail:
                             st.session_state[detail_key][i] = detail
+                # Recept označíme jako otevřený jen když detail opravdu máme
+                if i in st.session_state[detail_key]:
+                    st.session_state[zobrazene_key].append(i)
 
         if i in st.session_state[zobrazene_key] and i in st.session_state[detail_key]:
             with st.expander(f"📋 {nazev} — celý recept", expanded=True):
