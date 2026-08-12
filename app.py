@@ -209,7 +209,7 @@ def zobraz_recepty(prehled_key, detail_key, zobrazene_key, prompt_detail_fn, pre
 st.title("🍳 Rodinné recepty pro Dášu")
 st.write("Vyber suroviny a vygeneruj návrhy jídel nebo dezertů — pak pošli oblíbený recept na e-mail.")
 
-tab_jidla, tab_peceni = st.tabs(["🍳 Hlavní jídla", "🎂 Pečení"])
+tab_jidla, tab_peceni, tab_popis = st.tabs(["🍳 Hlavní jídla", "🎂 Pečení", "📝 Recepty podle popisu"])
 
 # ==================== HLAVNÍ JÍDLA ====================
 with tab_jidla:
@@ -339,4 +339,42 @@ with tab_peceni:
             ostatni=st.session_state.get("peceni_ostatni", ""),
         ),
         prefix_emailu="🎂 Recept:",
+    )
+
+# ==================== RECEPTY PODLE POPISU ====================
+with tab_popis:
+    st.subheader("Napiš, co si přeješ")
+    popis = st.text_area(
+        "Popiš, co máš v lednici nebo na co máš chuť",
+        placeholder="Např.: Mám kuřecí prsa, brambory a smetanu, chci něco rychlého do 30 minut...",
+        height=120,
+        key="popis_text",
+    )
+
+    if st.button("🚀 Vygenerovat návrhy jídel", type="primary", key="btn_popis"):
+        if not popis.strip():
+            st.warning("Napiš prosím, co si přeješ!")
+        else:
+            with st.spinner("AI šéfkuchař vymýšlí menu..."):
+                vysledek = generuj_z_ai(config.PROMPT_PREHLED_POPIS_SABLONA.format(popis=popis.strip()))
+
+                if vysledek:
+                    recepty = parsuj_recepty_json(vysledek)
+                    if recepty:
+                        st.session_state["popis_prehled"] = recepty
+                        st.session_state["popis_zadani"] = popis.strip()
+                        st.session_state.pop("popis_detail", None)
+                        st.session_state["popis_zobrazene"] = []
+                    else:
+                        st.error("Nepodařilo se zpracovat odpověď AI. Zkus to prosím znovu.")
+
+    zobraz_recepty(
+        prehled_key="popis_prehled",
+        detail_key="popis_detail",
+        zobrazene_key="popis_zobrazene",
+        prompt_detail_fn=lambda nazev: config.PROMPT_DETAIL_POPIS_SABLONA.format(
+            nazev_jidla=nazev,
+            popis=st.session_state.get("popis_zadani", ""),
+        ),
+        prefix_emailu="🍳 Recept:",
     )
