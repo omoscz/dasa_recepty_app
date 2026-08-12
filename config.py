@@ -214,3 +214,38 @@ Struktura receptu:
 **Doba přípravy:** ... min | **Doba pečení:** ... min
 
 **Výživové hodnoty (na 1 kus / porci):** 🔥 ~XXX kcal | 💪 XXg bílkovin | 🌾 XXg sacharidů | 🫒 XXg tuků"""
+
+PROMPT_PREHLED_POPIS_SABLONA = """Jsi šéfkuchař. Navrhni přesně 10 různorodých receptů podle tohoto popisu od uživatele:
+"{popis}"
+
+Popis může obsahovat cokoliv — suroviny, které má doma, chuť na určité jídlo, čas, který má na vaření, nebo jiné požadavky. Řiď se jím co nejvíce.
+Dbej na variabilitu — různé způsoby přípravy, různé chutě, různé kombinace surovin.
+
+Odpověz POUZE validním JSON polem bez jakéhokoliv dalšího textu nebo markdown formátování.
+Každý objekt v poli musí mít přesně tyto klíče:
+- "nazev": název jídla (string)
+- "popis": krátký popis o co se jedná, cca 3 věty — co to je, z čeho se to dělá a proč to stojí za to uvařit (string)
+- "dalsi_ingredience": seznam dalších ingrediencí potřebných nad rámec zmíněných (pole stringů, může být prázdné)
+- "nutricni_hodnoty": objekt s odhadovanými hodnotami na 1 porci: "kcal" (číslo), "bílkoviny" (string "Xg"), "sacharidy" (string "Xg"), "tuky" (string "Xg")
+
+Formát: [{{"nazev": "...", "popis": "...", "dalsi_ingredience": ["...", "..."], "nutricni_hodnoty": {{"kcal": 450, "bílkoviny": "32g", "sacharidy": "48g", "tuky": "12g"}}}}, ...]"""
+
+PROMPT_DETAIL_POPIS_SABLONA = """Vytvoř detailní recept pro jídlo: {nazev_jidla}
+
+Původní požadavek uživatele: {popis}
+
+Struktura receptu:
+### {nazev_jidla}
+
+**Ingredience** (s přesnými gramážemi):
+- ...
+
+**Postup krok za krokem:**
+1. ...
+
+**Tipy a triky:**
+- ...
+
+**Doba přípravy:** ... min | **Doba vaření/pečení:** ... min
+
+**Výživové hodnoty (na 1 porci):** 🔥 ~XXX kcal | 💪 XXg bílkovin | 🌾 XXg sacharidů | 🫒 XXg tuků"""
