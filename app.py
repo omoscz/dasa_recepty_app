@@ -228,7 +228,9 @@ def zobraz_recepty(prehled_key, detail_key, zobrazene_key, prompt_detail_fn, pre
 st.title("🍳 Rodinné recepty pro Dášu")
 st.write("Vyber suroviny a vygeneruj návrhy jídel nebo dezertů — pak pošli oblíbený recept na e-mail.")
 
-tab_jidla, tab_peceni, tab_popis = st.tabs(["🍳 Hlavní jídla", "🎂 Pečení", "📝 Recepty podle popisu"])
+tab_jidla, tab_peceni, tab_polevky, tab_popis = st.tabs(
+    ["🍳 Hlavní jídla", "🎂 Pečení", "🥣 Polévky", "📝 Recepty podle popisu"]
+)
 
 # ==================== HLAVNÍ JÍDLA ====================
 with tab_jidla:
@@ -358,6 +360,65 @@ with tab_peceni:
             ostatni=st.session_state.get("peceni_ostatni", ""),
         ),
         prefix_emailu="🎂 Recept:",
+    )
+
+# ==================== POLÉVKY ====================
+with tab_polevky:
+    st.subheader("1. Jaký typ polévky?")
+    vybrane_typy_pol = []
+    with st.expander("🍲 Typ polévky"):
+        for typ in config.POLEVKY_TYPY:
+            if st.checkbox(typ, key=f"polevka_typ_{typ}"):
+                vybrane_typy_pol.append(typ)
+
+    st.subheader("2. Jaké máš suroviny?")
+    vybrane_suroviny_pol = []
+    for kategorie, polozky in config.POLEVKY_SUROVINY.items():
+        with st.expander(kategorie):
+            for polozka in polozky:
+                if st.checkbox(polozka, key=f"polevka_surovina_{kategorie}_{polozka}"):
+                    vybrane_suroviny_pol.append(polozka)
+
+    st.subheader("3. Pro kolik porcí vařit?")
+    pocet_porci_pol = st.slider("Počet porcí", min_value=1, max_value=12, value=6, key="polevka_porce_slider")
+
+    if st.button("🚀 Vygenerovat návrhy polévek", type="primary", key="btn_polevky"):
+        if not vybrane_typy_pol and not vybrane_suroviny_pol:
+            st.warning("Vyber prosím alespoň typ polévky nebo surovinu!")
+        else:
+            with st.spinner("AI šéfkuchař vymýšlí polévky..."):
+                typ_str = ", ".join(vybrane_typy_pol) if vybrane_typy_pol else "libovolná polévka"
+                suroviny_str = ", ".join(vybrane_suroviny_pol) if vybrane_suroviny_pol else "základní suroviny"
+
+                vysledek = generuj_z_ai(config.PROMPT_PREHLED_POLEVKY_SABLONA.format(
+                    typ=typ_str,
+                    suroviny=suroviny_str,
+                    porce=pocet_porci_pol,
+                ))
+
+                if vysledek:
+                    recepty = parsuj_recepty_json(vysledek)
+                    if recepty:
+                        st.session_state["polevky_prehled"] = recepty
+                        st.session_state["polevky_typ"] = typ_str
+                        st.session_state["polevky_suroviny"] = suroviny_str
+                        st.session_state["polevky_porce"] = pocet_porci_pol
+                        st.session_state.pop("polevky_detail", None)
+                        st.session_state["polevky_zobrazene"] = []
+                    else:
+                        st.error("Nepodařilo se zpracovat odpověď AI. Zkus to prosím znovu.")
+
+    zobraz_recepty(
+        prehled_key="polevky_prehled",
+        detail_key="polevky_detail",
+        zobrazene_key="polevky_zobrazene",
+        prompt_detail_fn=lambda nazev: config.PROMPT_DETAIL_POLEVKY_SABLONA.format(
+            nazev_jidla=nazev,
+            typ=st.session_state.get("polevky_typ", ""),
+            suroviny=st.session_state.get("polevky_suroviny", ""),
+            porce=st.session_state.get("polevky_porce", 6),
+        ),
+        prefix_emailu="🥣 Recept:",
     )
 
 # ==================== RECEPTY PODLE POPISU ====================
