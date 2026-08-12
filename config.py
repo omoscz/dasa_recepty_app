@@ -133,6 +133,40 @@ PECENI_OSTATNI = [
     "Želatina",
 ]
 
+POLEVKY_TYPY = [
+    "Vývar (masový / kostní)",
+    "Krémová (hladká)",
+    "Zeleninová",
+    "Luštěninová (čočková, hrachová, fazolová)",
+    "Masová / sytá",
+    "Bramboračka",
+    "Gulášová / dršťková",
+    "Rybí",
+    "Sýrová / smetanová",
+    "Asijská (rámen, pho, thajská)",
+    "Studená (letní — gazpacho)",
+    "Dietní / lehká",
+]
+
+POLEVKY_SUROVINY = {
+    "🍖 Základ / maso": [
+        "Kuřecí (na vývar / maso)", "Hovězí (na vývar / guláš)", "Uzené maso",
+        "Slanina / špek", "Klobása", "Zeleninový vývar (základ)"
+    ],
+    "🥕 Zelenina": [
+        "Brambory", "Brokolice", "Celer", "Cibule", "Česnek", "Dýně",
+        "Fazolové lusky", "Hrášek", "Květák", "Mrkev", "Paprika",
+        "Petržel", "Pórek", "Rajčata", "Špenát"
+    ],
+    "🫘 Luštěniny": [
+        "Cizrna", "Čočka (červená / hnědá)", "Fazole", "Hrách"
+    ],
+    "🍜 Zavářka / do polévky": [
+        "Nudle", "Rýže", "Krupice", "Knedlíčky (masové / játrové)",
+        "Kapání", "Krutony", "Strouhaný sýr", "Vejce (zatřepání)"
+    ],
+}
+
 SMTP_SERVER = "smtp.seznam.cz"
 SMTP_PORT = 465
 EMAIL_SENDER = "dasajidelnicek@seznam.cz"
@@ -247,5 +281,42 @@ Struktura receptu:
 - ...
 
 **Doba přípravy:** ... min | **Doba vaření/pečení:** ... min
+
+**Výživové hodnoty (na 1 porci):** 🔥 ~XXX kcal | 💪 XXg bílkovin | 🌾 XXg sacharidů | 🫒 XXg tuků"""
+
+PROMPT_PREHLED_POLEVKY_SABLONA = """Jsi šéfkuchař. Navrhni přesně 10 různorodých receptů na polévky.
+Typ polévky: {typ}.
+Dostupné suroviny: {suroviny}.
+Každou polévku připrav na {porce} porcí.
+Dbej na variabilitu — různé postupy, chutě a kombinace surovin.
+
+Odpověz POUZE validním JSON polem bez jakéhokoliv dalšího textu nebo markdown formátování.
+Každý objekt v poli musí mít přesně tyto klíče:
+- "nazev": název polévky (string)
+- "popis": krátký popis o co se jedná, cca 3 věty — co to je, z čeho se to dělá a proč to stojí za to uvařit (string)
+- "dalsi_ingredience": seznam dalších ingrediencí potřebných nad rámec dostupných (pole stringů, může být prázdné)
+- "nutricni_hodnoty": objekt s odhadovanými hodnotami na 1 porci: "kcal" (číslo), "bílkoviny" (string "Xg"), "sacharidy" (string "Xg"), "tuky" (string "Xg")
+
+Formát: [{{"nazev": "...", "popis": "...", "dalsi_ingredience": ["...", "..."], "nutricni_hodnoty": {{"kcal": 220, "bílkoviny": "8g", "sacharidy": "18g", "tuky": "9g"}}}}, ...]"""
+
+PROMPT_DETAIL_POLEVKY_SABLONA = """Vytvoř detailní recept na polévku: {nazev_jidla}
+
+Typ polévky: {typ}
+Dostupné suroviny: {suroviny}
+Porce: {porce}
+
+Struktura receptu:
+### {nazev_jidla}
+
+**Ingredience** (s přesnými gramážemi):
+- ...
+
+**Postup krok za krokem:**
+1. ...
+
+**Tipy a triky:**
+- ...
+
+**Doba přípravy:** ... min | **Doba vaření:** ... min
 
 **Výživové hodnoty (na 1 porci):** 🔥 ~XXX kcal | 💪 XXg bílkovin | 🌾 XXg sacharidů | 🫒 XXg tuků"""
