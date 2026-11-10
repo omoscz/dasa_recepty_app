@@ -70,8 +70,39 @@ PECENI_TYPY_DEZERTY = [
     "Štrúdl / Závin",
     "Tiramisu",
     "Tvarohový koláč",
-    "Vánoční cukroví",
     "Vdolky",
+]
+
+VANOCE_TYPY = [
+    "Vanilkové rohlíčky",
+    "Linecké cukroví",
+    "Perníčky",
+    "Vosí hnízda (úly)",
+    "Kokosky",
+    "Pracny",
+    "Marokánky",
+    "Košíčky (plněné)",
+    "Rumové kuličky",
+    "Ischelské dortíčky",
+    "Sněhové pusinky",
+    "Medvědí tlapičky",
+    "Ořechové rohlíčky",
+    "Plněné ořechy",
+    "Florentýnky",
+    "Špičky",
+    "Bílkové cukroví",
+    "Datlové / fíkové",
+    "Makové cukroví",
+    "Vánočka / mazanec",
+]
+
+VANOCE_CHUT = [
+    "Ořechy",
+    "Kokos",
+    "Čokoláda",
+    "Mák",
+    "Povidla / marmeláda",
+    "Perníkové koření",
 ]
 
 PECENI_OVOCE = [
@@ -248,6 +279,45 @@ Struktura receptu:
 **Doba přípravy:** ... min | **Doba pečení:** ... min
 
 **Výživové hodnoty (na 1 kus / porci):** 🔥 ~XXX kcal | 💪 XXg bílkovin | 🌾 XXg sacharidů | 🫒 XXg tuků"""
+
+PROMPT_PREHLED_VANOCE_SABLONA = """Jsi zkušený cukrář. Navrhni přesně 10 různorodých receptů na vánoční cukroví.
+Typ cukroví: {typ}.
+Hlavní surovina / chuť: {chut}.
+Náročnost: {narocnost}.
+Pečené / nepečené: {peceni}.
+Trvanlivost: {trvanlivost}.
+Dbej na variabilitu — různé postupy, textury, chutě a kombinace surovin.
+
+Odpověz POUZE validním JSON polem bez jakéhokoliv dalšího textu nebo markdown formátování.
+Každý objekt v poli musí mít přesně tyto klíče:
+- "nazev": název cukroví (string)
+- "popis": krátký popis o co se jedná, cca 3 věty — co to je, z čeho se to dělá a proč to stojí za to upéct (string)
+- "dalsi_ingredience": seznam dalších ingrediencí potřebných nad rámec dostupných (pole stringů, může být prázdné)
+- "doba_pripravy": odhadovaná celková doba přípravy včetně pečení v minutách (číslo)
+- "nutricni_hodnoty": objekt s odhadovanými hodnotami na 1 kus: "kcal" (číslo), "bílkoviny" (string "Xg"), "sacharidy" (string "Xg"), "tuky" (string "Xg")
+
+Formát: [{{"nazev": "...", "popis": "...", "dalsi_ingredience": ["...", "..."], "doba_pripravy": 60, "nutricni_hodnoty": {{"kcal": 90, "bílkoviny": "1g", "sacharidy": "10g", "tuky": "5g"}}}}, ...]"""
+
+PROMPT_DETAIL_VANOCE_SABLONA = """Vytvoř detailní recept na vánoční cukroví: {nazev_jidla}
+
+Typ cukroví: {typ}
+Hlavní surovina / chuť: {chut}
+
+Struktura receptu:
+### {nazev_jidla}
+
+**Ingredience** (s přesnými gramážemi):
+- ...
+
+**Postup krok za krokem:**
+1. ...
+
+**Tipy a triky:**
+- ...
+
+**Doba přípravy:** ... min | **Doba pečení:** ... min
+
+**Výživové hodnoty (na 1 kus):** 🔥 ~XXX kcal | 💪 XXg bílkovin | 🌾 XXg sacharidů | 🫒 XXg tuků"""
 
 PROMPT_PREHLED_POPIS_SABLONA = """Jsi šéfkuchař. Navrhni přesně 10 různorodých receptů podle tohoto popisu od uživatele:
 "{popis}"
