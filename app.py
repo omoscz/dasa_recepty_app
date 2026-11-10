@@ -377,6 +377,9 @@ with tab_vanoce:
         for chut in config.VANOCE_CHUT:
             if st.checkbox(chut, key=f"vanoce_chut_{chut}"):
                 vybrane_chut.append(chut)
+        vlastni_chut = st.text_input("✏️ Vlastní (např. tvaroh, višně...)", key="vanoce_chut_vlastni")
+        if vlastni_chut.strip():
+            vybrane_chut.append(vlastni_chut.strip())
 
     st.subheader("3. Další nastavení")
     narocnost_v = st.selectbox(
