@@ -228,8 +228,8 @@ def zobraz_recepty(prehled_key, detail_key, zobrazene_key, prompt_detail_fn, pre
 st.title("🍳 Rodinné recepty pro Dášu")
 st.write("Vyber suroviny a vygeneruj návrhy jídel nebo dezertů — pak pošli oblíbený recept na e-mail.")
 
-tab_jidla, tab_peceni, tab_polevky, tab_popis = st.tabs(
-    ["🍳 Hlavní jídla", "🎂 Pečení", "🥣 Polévky", "📝 Recepty podle popisu"]
+tab_jidla, tab_peceni, tab_vanoce, tab_polevky, tab_popis = st.tabs(
+    ["🍳 Hlavní jídla", "🎂 Pečení", "🎄 Vánoce", "🥣 Polévky", "📝 Recepty podle popisu"]
 )
 
 # ==================== HLAVNÍ JÍDLA ====================
@@ -360,6 +360,75 @@ with tab_peceni:
             ostatni=st.session_state.get("peceni_ostatni", ""),
         ),
         prefix_emailu="🎂 Recept:",
+    )
+
+# ==================== VÁNOCE ====================
+with tab_vanoce:
+    st.subheader("1. Jaké cukroví chceš péct?")
+    vybrane_typy_v = []
+    with st.expander("🍪 Typ cukroví"):
+        for typ in config.VANOCE_TYPY:
+            if st.checkbox(typ, key=f"vanoce_typ_{typ}"):
+                vybrane_typy_v.append(typ)
+
+    st.subheader("2. Hlavní surovina / chuť")
+    vybrane_chut = []
+    with st.expander("🌰 Chuť"):
+        for chut in config.VANOCE_CHUT:
+            if st.checkbox(chut, key=f"vanoce_chut_{chut}"):
+                vybrane_chut.append(chut)
+
+    st.subheader("3. Další nastavení")
+    narocnost_v = st.selectbox(
+        "💪 Náročnost",
+        ["Bez omezení", "Snadné", "Střední", "Náročné"],
+        key="vanoce_narocnost",
+    )
+    peceni_v = st.selectbox(
+        "🔥 Pečené / nepečené",
+        ["Nezáleží", "Pečené", "Nepečené"],
+        key="vanoce_peceni",
+    )
+    trvanlivost_v = st.selectbox(
+        "📦 Trvanlivost",
+        ["Nezáleží", "Na uležení (vydrží týdny)", "Čerstvé (hned)"],
+        key="vanoce_trvanlivost",
+    )
+
+    if st.button("🚀 Vygenerovat návrhy cukroví", type="primary", key="btn_vanoce"):
+        with st.spinner("Cukrář vymýšlí vánoční cukroví..."):
+            typ_str = ", ".join(vybrane_typy_v) if vybrane_typy_v else "libovolné vánoční cukroví"
+            chut_str = ", ".join(vybrane_chut) if vybrane_chut else "libovolná"
+
+            vysledek = generuj_z_ai(config.PROMPT_PREHLED_VANOCE_SABLONA.format(
+                typ=typ_str,
+                chut=chut_str,
+                narocnost=narocnost_v,
+                peceni=peceni_v,
+                trvanlivost=trvanlivost_v,
+            ))
+
+            if vysledek:
+                recepty = parsuj_recepty_json(vysledek)
+                if recepty:
+                    st.session_state["vanoce_prehled"] = recepty
+                    st.session_state["vanoce_typ"] = typ_str
+                    st.session_state["vanoce_chut"] = chut_str
+                    st.session_state.pop("vanoce_detail", None)
+                    st.session_state["vanoce_zobrazene"] = []
+                else:
+                    st.error("Nepodařilo se zpracovat odpověď AI. Zkus to prosím znovu.")
+
+    zobraz_recepty(
+        prehled_key="vanoce_prehled",
+        detail_key="vanoce_detail",
+        zobrazene_key="vanoce_zobrazene",
+        prompt_detail_fn=lambda nazev: config.PROMPT_DETAIL_VANOCE_SABLONA.format(
+            nazev_jidla=nazev,
+            typ=st.session_state.get("vanoce_typ", ""),
+            chut=st.session_state.get("vanoce_chut", ""),
+        ),
+        prefix_emailu="🎄 Recept:",
     )
 
 # ==================== POLÉVKY ====================
