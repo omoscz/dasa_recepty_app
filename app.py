@@ -1,532 +1,455 @@
-import streamlit as st
-import smtplib
-import json
 import re
-import unicodedata
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from google import genai
-from google.genai import errors
+import urllib.parse
 
-import config
+import streamlit as st
 
-st.set_page_config(page_title="Dáša Recepty App", page_icon="🍳", layout="centered")
+import matematika
+import cteni
+import cestina
 
-
-MODELY = ["gemini-2.5-flash-lite", "gemini-2.5-flash"]
+st.set_page_config(page_title="Škola hrou", page_icon="🎒", layout="centered")
 
 
-def generuj_z_ai(prompt):
-    if "GEMINI_KEY" not in st.secrets:
-        st.error("V Secrets chybí proměnná GEMINI_KEY!")
-        return None
-
-    klient = genai.Client(api_key=st.secrets["GEMINI_KEY"])
-    for model in MODELY:
-        try:
-            response = klient.models.generate_content(model=model, contents=prompt)
-            return response.text
-        except errors.APIError as e:
-            if e.code == 403:
-                st.error("⚠️ API klíč je neplatný. Zkontroluj nastavení Secrets.")
-                return None
-            else:
-                st.warning(f"⚠️ Přepínám na záložní model... [{e.code}]")
-
-    st.error("❌ Všechny modely selhaly. Zkus to prosím za chvíli.")
-    return None
+def _oznac_vse(keys, zdroj):
+    # Nastaví všem písmenům ve skupině stejnou hodnotu jako "Označit vše"
+    hodnota = st.session_state[zdroj]
+    for k in keys:
+        st.session_state[k] = hodnota
 
 
-def parsuj_recepty_json(text):
-    text = re.sub(r"```(?:json)?\s*", "", text).strip()
-    match = re.search(r"\[.*\]", text, re.DOTALL)
-    if match:
-        try:
-            return json.loads(match.group())
-        except json.JSONDecodeError:
-            pass
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    return None
+CERVENA = "#ff4b4b"  # barva pro špatně vyřešené zadání
 
 
-def _bez_diakritiky(text):
-    return "".join(
-        c for c in unicodedata.normalize("NFD", str(text))
-        if unicodedata.category(c) != "Mn"
+def velky_text(text, velikost="2rem", barva=None):
+    styl = f"font-size:{velikost};font-weight:600;margin:4px 0"
+    if barva:
+        styl += f";color:{barva}"
+    st.markdown(
+        f"<div style='{styl}'>{text}</div>",
+        unsafe_allow_html=True,
     )
 
 
-def ziskej_nutri(nutri, klic, vychozi="?"):
-    # Najde hodnotu bez ohledu na diakritiku a velikost písmen v klíči
-    cil = _bez_diakritiky(klic).lower()
-    for k, v in nutri.items():
-        if _bez_diakritiky(k).lower() == cil:
-            return v
-    return vychozi
+def whatsapp_odkazy(profil, modul_nazev, skore, pocet, chyby):
+    radky = [f"📚 {profil} — {modul_nazev}", f"Skóre: {skore}/{pocet}"]
+    if chyby:
+        radky.append("")
+        radky.append("Chyby:")
+        for zadani, moje, spravne in chyby:
+            radky.append(f"• {zadani}  tvá odpověď: {moje}  správně: {spravne}")
+    else:
+        radky.append("Všechno správně! 🎉")
+    zprava = urllib.parse.quote("\n".join(radky))
+
+    cisla = [("👩 mámě", st.secrets.get("WHATSAPP_MAMA")),
+             ("👨 tátovi", st.secrets.get("WHATSAPP_TATA"))]
+    sloupce = st.columns(2)
+    i = 0
+    for popisek, cislo in cisla:
+        if cislo:
+            with sloupce[i]:
+                st.link_button(f"📲 Poslat {popisek}", f"https://wa.me/{cislo}?text={zprava}")
+            i += 1
+    if i == 0:
+        st.caption("ℹ️ Pro odesílání na WhatsApp doplň čísla do Secrets (WHATSAPP_MAMA / WHATSAPP_TATA).")
 
 
-def _bold(text):
-    return re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", text)
+def _mat_ok(profil, tid, i, p):
+    # Je příklad vyřešený správně? (čte aktuální odpovědi ze session_state)
+    if p["typ"] in ("cislo", "slovni"):
+        return st.session_state.get(f"{profil}_odp_{tid}_{i}") == p["odpoved"]
+    if p["typ"] == "zbytek":
+        return (st.session_state.get(f"{profil}_podil_{tid}_{i}") == p["podil"]
+                and st.session_state.get(f"{profil}_zbytek_{tid}_{i}") == p["zbytek"])
+    return st.session_state.get(f"{profil}_cmp_{tid}_{i}") == p["odpoved"]  # porovnani
 
 
-def markdown_na_html(text):
-    html = []
-    in_ul = False
-    in_ol = False
+def spust_matematiku(profil, moduly):
+    nazvy = list(moduly.keys())
+    modul_nazev = st.selectbox("Vyber cvičení", nazvy, key=f"{profil}_modul")
+    modul = moduly[modul_nazev]
 
-    def zavri_listy():
-        nonlocal in_ul, in_ol
-        if in_ul:
-            html.append("</ul>")
-            in_ul = False
-        if in_ol:
-            html.append("</ol>")
-            in_ol = False
+    limit = 10
+    if modul in ("scitani_odcitani", "porovnavani"):
+        limit = st.radio("Do kolika počítáme?", [5, 10, 20], horizontal=True, index=1, key=f"{profil}_limit")
 
-    for line in text.split("\n"):
-        s = line.strip()
+    pocet = st.slider("Počet příkladů", min_value=1, max_value=20, value=8, key=f"{profil}_pocet")
 
-        if not s:
-            zavri_listy()
-            continue
+    if st.button("🎲 Vygenerovat příklady", type="primary", key=f"{profil}_gen"):
+        test_id = st.session_state.get(f"{profil}_testid", 0) + 1
+        st.session_state[f"{profil}_testid"] = test_id
+        st.session_state[f"{profil}_test"] = {
+            "polozky": matematika.vygeneruj_test(modul, pocet, limit),
+            "modul_nazev": modul_nazev,
+            "test_id": test_id,
+            "zkontrolovano": False,
+        }
 
-        if s.startswith("### "):
-            zavri_listy()
-            html.append(
-                f'<h3 style="color:#2e7d32;margin:20px 0 6px;border-bottom:1px solid #eee;padding-bottom:4px">'
-                f"{_bold(s[4:])}</h3>"
-            )
-        elif s.startswith("## "):
-            zavri_listy()
-            html.append(
-                f'<h2 style="color:#1a5276;margin:24px 0 8px">{_bold(s[3:])}</h2>'
-            )
-        elif re.match(r"^\d+\.\s", s):
-            if in_ul:
-                html.append("</ul>")
-                in_ul = False
-            if not in_ol:
-                html.append('<ol style="padding-left:22px;margin:6px 0">')
-                in_ol = True
-            content = re.sub(r"^\d+\.\s", "", s)
-            html.append(f'<li style="margin:4px 0">{_bold(content)}</li>')
-        elif s.startswith("* ") or s.startswith("- "):
-            if in_ol:
-                html.append("</ol>")
-                in_ol = False
-            if not in_ul:
-                html.append('<ul style="padding-left:20px;margin:6px 0">')
-                in_ul = True
-            html.append(f'<li style="margin:4px 0">{_bold(s[2:])}</li>')
-        else:
-            zavri_listy()
-            html.append(f'<p style="margin:6px 0">{_bold(s)}</p>')
-
-    zavri_listy()
-    return "\n".join(html)
-
-
-def odesli_email(predmet, obsah_md):
-    odesilatel = config.EMAIL_SENDER
-    heslo = st.secrets.get("EMAIL_PASSWORD", config.EMAIL_PASSWORD)
-    prijemce = config.EMAIL_RECEIVER
-
-    html_telo = f"""
-    <html>
-      <body style="font-family:Arial,sans-serif;color:#333333;line-height:1.65;background:#f9f9f9">
-        <div style="max-width:600px;margin:0 auto;padding:28px 24px;
-                    background:#ffffff;border:1px solid #dddddd;border-radius:10px">
-          {markdown_na_html(obsah_md)}
-        </div>
-      </body>
-    </html>
-    """
-
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = predmet
-    msg["From"] = odesilatel
-    msg["To"] = prijemce
-    msg.attach(MIMEText(html_telo, "html", "utf-8"))
-
-    try:
-        with smtplib.SMTP_SSL(config.SMTP_SERVER, config.SMTP_PORT) as server:
-            server.login(odesilatel, heslo)
-            server.sendmail(odesilatel, prijemce, msg.as_string())
-        return True
-    except Exception as e:
-        st.error(f"E-mail se nepodařilo odeslat: {e}")
-        return False
-
-
-def zobraz_recepty(prehled_key, detail_key, zobrazene_key, prompt_detail_fn, prefix_emailu):
-    if prehled_key not in st.session_state:
+    test = st.session_state.get(f"{profil}_test")
+    if not test:
         return
 
-    st.success("✨ Tady je 10 návrhů — klikni na recept pro zobrazení detailu:")
+    tid = test["test_id"]
     st.write("---")
 
-    if detail_key not in st.session_state:
-        st.session_state[detail_key] = {}
-    if zobrazene_key not in st.session_state:
-        st.session_state[zobrazene_key] = []
+    zkontrolovano = test.get("zkontrolovano")
+    for i, p in enumerate(test["polozky"]):
+        barva = CERVENA if (zkontrolovano and not _mat_ok(profil, tid, i, p)) else None
+        if p["typ"] in ("cislo", "slovni"):
+            if p["typ"] == "slovni":
+                if barva:
+                    st.markdown(f"<span style='color:{barva}'>{p['zadani']}</span>",
+                                unsafe_allow_html=True)
+                else:
+                    st.markdown(p['zadani'])
+            else:
+                velky_text(p['zadani'], barva=barva)
+            st.number_input("odpověď", value=None, step=1, format="%d",
+                            key=f"{profil}_odp_{tid}_{i}", label_visibility="collapsed")
+        elif p["typ"] == "zbytek":
+            velky_text(p['zadani'], barva=barva)
+            c1, c2 = st.columns(2)
+            with c1:
+                st.number_input("podíl", value=None, step=1, format="%d", key=f"{profil}_podil_{tid}_{i}")
+            with c2:
+                st.number_input("zbytek", value=None, step=1, format="%d", key=f"{profil}_zbytek_{tid}_{i}")
+        elif p["typ"] == "porovnani":
+            velky_text(f"{p['a']} &nbsp;?&nbsp; {p['b']}", "2.4rem", barva=barva)
+            st.radio("znaménko", ["<", "=", ">"], index=None, horizontal=True,
+                     format_func=lambda z: {"<": "\\<", ">": "\\>"}.get(z, z),
+                     key=f"{profil}_cmp_{tid}_{i}", label_visibility="collapsed")
+        st.write("")
 
-    for i, recept in enumerate(st.session_state[prehled_key]):
-        nazev = recept.get("nazev", f"Recept {i + 1}")
-        popis = recept.get("popis", "")
-        dalsi = recept.get("dalsi_ingredience", [])
+    if st.button("✅ Zkontrolovat", type="primary", key=f"{profil}_check_{tid}"):
+        test["zkontrolovano"] = True
+        st.rerun()
 
-        st.markdown(f"### {i + 1}. {nazev}")
-        st.write(popis)
+    if not test.get("zkontrolovano"):
+        return
 
-        doba = recept.get("doba_pripravy")
-        if doba:
-            st.markdown(f"⏱️ **Celková doba: {doba} min**", unsafe_allow_html=True)
+    st.write("---")
+    skore = 0
+    chyby = []
+    for i, p in enumerate(test["polozky"]):
+        if p["typ"] in ("cislo", "slovni"):
+            moje = st.session_state.get(f"{profil}_odp_{tid}_{i}")
+            spravne = p["odpoved"]
+            ok = (moje == spravne)
+            moje_str = "—" if moje is None else str(moje)
+            spravne_str = str(spravne) + (f" {p['jednotka']}" if p["typ"] == "slovni" else "")
+        elif p["typ"] == "zbytek":
+            mp = st.session_state.get(f"{profil}_podil_{tid}_{i}")
+            mz = st.session_state.get(f"{profil}_zbytek_{tid}_{i}")
+            ok = (mp == p["podil"] and mz == p["zbytek"])
+            moje_str = f"{'—' if mp is None else mp} zb. {'—' if mz is None else mz}"
+            spravne_str = f"{p['podil']} zb. {p['zbytek']}"
+        else:  # porovnani
+            moje = st.session_state.get(f"{profil}_cmp_{tid}_{i}")
+            ok = (moje == p["odpoved"])
+            moje_str = moje or "—"
+            spravne_str = p["odpoved"]
+            p_zadani = f"{p['a']} ? {p['b']}"
 
-        nutri = recept.get("nutricni_hodnoty", {})
-        if nutri:
-            st.markdown(
-                f"🔥 **{ziskej_nutri(nutri, 'kcal')} kcal** &nbsp;|&nbsp; "
-                f"💪 **{ziskej_nutri(nutri, 'bilkoviny')} bílkovin** &nbsp;|&nbsp; "
-                f"🌾 **{ziskej_nutri(nutri, 'sacharidy')} sacharidů** &nbsp;|&nbsp; "
-                f"🫒 **{ziskej_nutri(nutri, 'tuky')} tuků**",
-                unsafe_allow_html=True
-            )
-
-        if dalsi:
-            st.caption(f"🛒 Další potřebné ingredience: {', '.join(dalsi)}")
+        zadani = p["zadani"] if p["typ"] != "porovnani" else p_zadani
+        if ok:
+            skore += 1
+            st.markdown(f"✅ {zadani}  →  {spravne_str}")
         else:
-            st.caption("✅ Vystačíš si s vybranými surovinami!")
+            st.markdown(f"❌ {zadani}  →  tvoje: {moje_str} · správně: **{spravne_str}**")
+            chyby.append((zadani, moje_str, spravne_str))
 
-        if i not in st.session_state[zobrazene_key]:
-            if st.button("📖 Zobrazit celý recept", key=f"{zobrazene_key}_btn_{i}"):
-                if i not in st.session_state[detail_key]:
-                    with st.spinner(f"Generuji detailní recept pro '{nazev}'..."):
-                        detail = generuj_z_ai(prompt_detail_fn(nazev))
-                        if detail:
-                            st.session_state[detail_key][i] = detail
-                # Recept označíme jako otevřený jen když detail opravdu máme
-                if i in st.session_state[detail_key]:
-                    st.session_state[zobrazene_key].append(i)
+    pocet = len(test["polozky"])
+    st.write("---")
+    velky_text(f"Skóre: {skore} / {pocet}", "1.6rem")
+    if skore == pocet:
+        st.balloons()
+        st.success("🎉 Všechno správně! Výborně!")
 
-        if i in st.session_state[zobrazene_key] and i in st.session_state[detail_key]:
-            with st.expander(f"📋 {nazev} — celý recept", expanded=True):
-                st.markdown(st.session_state[detail_key][i])
-                st.write("---")
-                if st.button("✉️ Odeslat tento recept na e-mail", key=f"{zobrazene_key}_email_{i}"):
-                    with st.spinner("Odesílám e-mail..."):
-                        if odesli_email(f"{prefix_emailu} {nazev}", st.session_state[detail_key][i]):
-                            st.balloons()
-                            st.success("🎉 Recept byl úspěšně odeslán na e-mail!")
-
+    if profil == "Sára":
         st.write("---")
+        whatsapp_odkazy(profil, test["modul_nazev"], skore, pocet, chyby)
+
+
+def spust_cteni():
+    st.caption("Rodič: zaškrtni písmena, která už Nela zná. Appka složí slabiky a slova jen z nich.")
+
+    sam_keys = [f"cteni_sam_{p}" for p in cteni.SAMOHLASKY]
+    souh_keys = [f"cteni_souh_{p}" for p in cteni.SOUHLASKY]
+
+    vybrane_samohlasky = []
+    with st.expander("🔵 Samohlásky", expanded=True):
+        st.checkbox("Označit vše", key="cteni_sam_all",
+                    on_change=_oznac_vse, args=(sam_keys, "cteni_sam_all"))
+        cols = st.columns(7)
+        for idx, p in enumerate(cteni.SAMOHLASKY):
+            with cols[idx % 7]:
+                if st.checkbox(p.upper(), key=f"cteni_sam_{p}"):
+                    vybrane_samohlasky.append(p)
+
+    vybrane_souhlasky = []
+    with st.expander("🟢 Souhlásky", expanded=True):
+        st.checkbox("Označit vše", key="cteni_souh_all",
+                    on_change=_oznac_vse, args=(souh_keys, "cteni_souh_all"))
+        cols = st.columns(7)
+        for idx, p in enumerate(cteni.SOUHLASKY):
+            with cols[idx % 7]:
+                if st.checkbox(p.upper(), key=f"cteni_souh_{p}"):
+                    vybrane_souhlasky.append(p)
+
+    rezim = st.radio("Co trénujeme?", ["Slabiky", "Slova"], horizontal=True, key="cteni_rezim")
+    pocet = st.slider("Kolik jich ukázat?", min_value=3, max_value=24, value=9, key="cteni_pocet")
+
+    if st.button("👀 Ukázat", type="primary", key="cteni_gen"):
+        pismena = vybrane_samohlasky + vybrane_souhlasky
+        if rezim == "Slabiky":
+            if not vybrane_samohlasky or not vybrane_souhlasky:
+                st.warning("Vyber aspoň jednu samohlásku a jednu souhlásku.")
+                st.session_state.pop("cteni_polozky", None)
+            else:
+                st.session_state["cteni_polozky"] = cteni.vygeneruj_slabiky(
+                    pocet, vybrane_samohlasky, vybrane_souhlasky)
+        else:
+            polozky = cteni.vygeneruj_slova(pocet, pismena)
+            if not polozky:
+                st.warning("Z vybraných písmen zatím nejde složit žádné slovo. Zkus přidat další písmena.")
+                st.session_state.pop("cteni_polozky", None)
+            else:
+                st.session_state["cteni_polozky"] = polozky
+
+    polozky = st.session_state.get("cteni_polozky")
+    if polozky:
+        st.write("---")
+        for radek_start in range(0, len(polozky), 3):
+            cols = st.columns(3)
+            for j, slovo in enumerate(polozky[radek_start:radek_start + 3]):
+                with cols[j]:
+                    st.markdown(
+                        f"<div style='font-size:2.6rem;font-weight:700;text-align:center;"
+                        f"text-transform:uppercase;letter-spacing:2px;"
+                        f"padding:14px;margin:6px 0;border-radius:12px;"
+                        f"background:rgba(120,120,120,0.12)'>{slovo}</div>",
+                        unsafe_allow_html=True,
+                    )
+
+
+ROD_MAP = {"mužský": "m", "ženský": "ž", "střední": "s"}
+CISLO_MAP = {"jednotné": "j", "množné": "mn"}
+ROD_NAZEV = {"m": "mužský", "ž": "ženský", "s": "střední"}
+CISLO_NAZEV = {"j": "jednotné", "mn": "množné"}
+
+
+def _cj_ok(tid, i, p):
+    # Je položka češtiny vyřešená správně? (čte aktuální odpovědi ze session_state)
+    if p["typ"] == "diktat":
+        return all(st.session_state.get(f"cj_{tid}_{i}_b{j}") == sp
+                   for j, sp in enumerate(p["odp"]))
+    if p["typ"] == "stavba":
+        mpr_ = (st.session_state.get(f"cj_{tid}_{i}_pred") or "").strip().lower()
+        mk = (st.session_state.get(f"cj_{tid}_{i}_kor") or "").strip().lower()
+        mpp = (st.session_state.get(f"cj_{tid}_{i}_prip") or "").strip().lower()
+        return mpr_ == p["predpona"] and mk == p["koren"] and mpp == p["pripona"]
+    if p["typ"] == "druhy":
+        moje_pj = set(st.session_state.get(f"cj_{tid}_{i}_pj") or [])
+        moje_sl = set(st.session_state.get(f"cj_{tid}_{i}_sl") or [])
+        return moje_pj == set(p["podst"]) and moje_sl == set(p["slovesa"])
+    if p["typ"] == "pad":
+        return (st.session_state.get(f"cj_{tid}_{i}") or "").strip().lower() == p["odp"].lower()
+    # kat
+    mr = st.session_state.get(f"cj_{tid}_{i}_rod")
+    mc = st.session_state.get(f"cj_{tid}_{i}_cislo")
+    mp_ = st.session_state.get(f"cj_{tid}_{i}_pad")
+    return (ROD_MAP.get(mr) == p["rod"] and CISLO_MAP.get(mc) == p["cislo"]
+            and mp_ == str(p["pad"]))
+
+
+def spust_cestinu():
+    nazvy = list(cestina.SUBMODULY.keys())
+    sub_nazev = st.selectbox("Vyber cvičení", nazvy, key="cj_sub")
+    sub = cestina.SUBMODULY[sub_nazev]
+
+    skupiny = None
+    if sub == "diktat":
+        skupiny = st.multiselect("Skupiny (podle písmene)", cestina.DIKTATY_SKUPINY,
+                                 default=cestina.DIKTATY_SKUPINY, key="cj_skupiny")
+
+    pocet_label = "Počet vět" if sub == "diktat" else "Počet příkladů"
+    pocet = st.slider(pocet_label, min_value=1, max_value=20, value=8, key="cj_pocet")
+
+    if st.button("🎲 Vygenerovat", type="primary", key="cj_gen"):
+        if sub == "diktat" and not skupiny:
+            st.warning("Vyber aspoň jednu skupinu písmen.")
+        else:
+            tid = st.session_state.get("cj_testid", 0) + 1
+            st.session_state["cj_testid"] = tid
+            if sub == "diktat":
+                pol = cestina.diktat_vygeneruj(skupiny, pocet)
+            elif sub == "pady":
+                pol = cestina.pady_vygeneruj(pocet)
+            elif sub == "kat":
+                pol = cestina.mluvnicke_vygeneruj(pocet)
+            elif sub == "druhy":
+                pol = cestina.druhy_vygeneruj(pocet)
+            else:
+                pol = cestina.stavba_vygeneruj(pocet)
+            st.session_state["cj_test"] = {
+                "polozky": pol, "sub_nazev": sub_nazev, "test_id": tid, "zkontrolovano": False,
+            }
+
+    test = st.session_state.get("cj_test")
+    if not test:
+        return
+    tid = test["test_id"]
+    st.write("---")
+
+    zkontrolovano = test.get("zkontrolovano")
+    for i, p in enumerate(test["polozky"]):
+        barva = CERVENA if (zkontrolovano and not _cj_ok(tid, i, p)) else None
+        cislo = f"{i + 1}.&nbsp;&nbsp;"
+        if p["typ"] == "diktat":
+            velky_text(f"{cislo}{p['text']}", "1.3rem", barva=barva)
+            pocet_mezer = len(p["odp"])
+            cols = st.columns(pocet_mezer)
+            for j in range(pocet_mezer):
+                with cols[j]:
+                    st.radio(f"mezera {j + 1}", ["i", "í", "y", "ý"], index=None,
+                             key=f"cj_{tid}_{i}_b{j}", label_visibility="collapsed")
+        elif p["typ"] == "pad":
+            velky_text(f"{cislo}{p['zadani']}", "1.1rem", barva=barva)
+            st.text_input("odpověď", key=f"cj_{tid}_{i}", label_visibility="collapsed")
+        elif p["typ"] == "kat":
+            veta_html = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", p["veta"])
+            velky_text(f"{cislo}{veta_html}", "1.1rem", barva=barva)
+            st.caption(f"Urči u slova „{p['slovo']}“:")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.radio("rod", ["mužský", "ženský", "střední"], index=None, key=f"cj_{tid}_{i}_rod")
+            with c2:
+                st.radio("číslo", ["jednotné", "množné"], index=None, key=f"cj_{tid}_{i}_cislo")
+            with c3:
+                st.radio("pád", ["1", "2", "3", "4", "5", "6", "7"], index=None, key=f"cj_{tid}_{i}_pad")
+        elif p["typ"] == "stavba":
+            velky_text(f"{i + 1}.&nbsp;&nbsp;{p['slovo']}")
+            st.caption("Rozděl slovo. Pokud některá část chybí, nech políčko prázdné.")
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.text_input("Předpona", key=f"cj_{tid}_{i}_pred")
+            with c2:
+                st.text_input("Kořen", key=f"cj_{tid}_{i}_kor")
+            with c3:
+                st.text_input("Přípona", key=f"cj_{tid}_{i}_prip")
+        elif p["typ"] == "druhy":
+            velky_text(f"{i + 1}.&nbsp;&nbsp;{p['veta']}", "1.3rem")
+            st.caption("Klikni na podstatná jména (můžeš jich označit víc):")
+            st.pills("podstatná jména", p["slova"], selection_mode="multi",
+                     key=f"cj_{tid}_{i}_pj", label_visibility="collapsed")
+            st.caption("Klikni na slovesa:")
+            st.pills("slovesa", p["slova"], selection_mode="multi",
+                     key=f"cj_{tid}_{i}_sl", label_visibility="collapsed")
+        st.write("")
+
+    if st.button("✅ Zkontrolovat", type="primary", key=f"cj_check_{tid}"):
+        test["zkontrolovano"] = True
+        st.rerun()
+    if not test.get("zkontrolovano"):
+        return
+
+    st.write("---")
+    ziskano = 0
+    maximum = 0
+    chyby = []
+    for i, p in enumerate(test["polozky"]):
+        if p["typ"] == "diktat":
+            spravne_blanky = 0
+            moje_pismena = []
+            for j, spravne_p in enumerate(p["odp"]):
+                moje_p = st.session_state.get(f"cj_{tid}_{i}_b{j}")
+                moje_pismena.append(moje_p or "_")
+                if moje_p == spravne_p:
+                    spravne_blanky += 1
+            maximum += len(p["odp"])
+            ziskano += spravne_blanky
+            ok = (spravne_blanky == len(p["odp"]))
+            zadani = p["text"]
+            moje_str = cestina._vypln(p["text"], moje_pismena) if "_" not in moje_pismena else " / ".join(moje_pismena)
+            spravne_str = p["plny"]
+        elif p["typ"] == "stavba":
+            mpr_ = (st.session_state.get(f"cj_{tid}_{i}_pred") or "").strip().lower()
+            mk = (st.session_state.get(f"cj_{tid}_{i}_kor") or "").strip().lower()
+            mpp = (st.session_state.get(f"cj_{tid}_{i}_prip") or "").strip().lower()
+            cor = int(mpr_ == p["predpona"]) + int(mk == p["koren"]) + int(mpp == p["pripona"])
+            maximum += 3
+            ziskano += cor
+            ok = (cor == 3)
+            zadani = f"rozděl „{p['slovo']}“"
+            moje_str = f"před: {mpr_ or '–'} / kořen: {mk or '–'} / příp: {mpp or '–'}"
+            spravne_str = (f"před: {p['predpona'] or '–'} / kořen: {p['koren']} / "
+                           f"příp: {p['pripona'] or '–'}")
+        elif p["typ"] == "druhy":
+            moje_pj = set(st.session_state.get(f"cj_{tid}_{i}_pj") or [])
+            moje_sl = set(st.session_state.get(f"cj_{tid}_{i}_sl") or [])
+            spr_pj = set(p["podst"])
+            spr_sl = set(p["slovesa"])
+            # bod za každé správně označené slovo, mínus za chybně označené (min. 0)
+            bod_pj = max(0, len(moje_pj & spr_pj) - len(moje_pj - spr_pj))
+            bod_sl = max(0, len(moje_sl & spr_sl) - len(moje_sl - spr_sl))
+            maximum += len(spr_pj) + len(spr_sl)
+            ziskano += bod_pj + bod_sl
+            ok = (moje_pj == spr_pj and moje_sl == spr_sl)
+            zadani = p["veta"]
+            moje_str = (f"podst.: {', '.join(sorted(moje_pj)) or '—'} · "
+                        f"slovesa: {', '.join(sorted(moje_sl)) or '—'}")
+            spravne_str = (f"podst.: {', '.join(p['podst'])} · "
+                           f"slovesa: {', '.join(p['slovesa'])}")
+        else:
+            maximum += 1
+            if p["typ"] == "pad":
+                moje = (st.session_state.get(f"cj_{tid}_{i}") or "").strip()
+                ok = (moje.lower() == p["odp"].lower())
+                zadani = p["zadani"]
+                moje_str = moje or "—"
+                spravne_str = p["odp"]
+            else:  # kat
+                mr = st.session_state.get(f"cj_{tid}_{i}_rod")
+                mc = st.session_state.get(f"cj_{tid}_{i}_cislo")
+                mp_ = st.session_state.get(f"cj_{tid}_{i}_pad")
+                ok = (ROD_MAP.get(mr) == p["rod"] and CISLO_MAP.get(mc) == p["cislo"] and mp_ == str(p["pad"]))
+                zadani = f"„{p['slovo']}“ — rod/číslo/pád"
+                moje_str = f"{mr or '—'} / {mc or '—'} / {mp_ or '—'}"
+                spravne_str = f"{ROD_NAZEV[p['rod']]} / {CISLO_NAZEV[p['cislo']]} / {p['pad']}."
+            if ok:
+                ziskano += 1
+
+        if ok:
+            st.markdown(f"✅ **{i + 1}.** {zadani}  →  {spravne_str}")
+        else:
+            st.markdown(f"❌ **{i + 1}.** {zadani}  →  tvoje: {moje_str} · správně: **{spravne_str}**")
+            chyby.append((zadani, moje_str, spravne_str))
+
+    st.write("---")
+    velky_text(f"Skóre: {ziskano} / {maximum}", "1.6rem")
+    if maximum and ziskano == maximum:
+        st.balloons()
+        st.success("🎉 Všechno správně! Výborně!")
+
+    st.write("---")
+    whatsapp_odkazy("Sára", test["sub_nazev"], ziskano, maximum, chyby)
 
 
 # --- UI ---
-st.title("🍳 Rodinné recepty pro Dášu")
-st.write("Vyber suroviny a vygeneruj návrhy jídel nebo dezertů — pak pošli oblíbený recept na e-mail.")
+st.sidebar.title("🎒 Škola hrou")
+profil = st.sidebar.radio("Kdo cvičí?", ["Nela (1. třída)", "Sára (4. třída)"])
 
-tab_jidla, tab_peceni, tab_vanoce, tab_polevky, tab_popis = st.tabs(
-    ["🍳 Hlavní jídla", "🎂 Pečení", "🎄 Vánoce", "🥣 Polévky", "📝 Recepty podle popisu"]
-)
-
-# ==================== HLAVNÍ JÍDLA ====================
-with tab_jidla:
-    st.subheader("1. Co máme v akci / v lednici?")
-    vybrane_suroviny = []
-    for kategorie, polozky in config.SUROVINY_KATALOG.items():
-        with st.expander(kategorie):
-            for polozka in polozky:
-                if st.checkbox(polozka, key=f"surovina_{kategorie}_{polozka}"):
-                    vybrane_suroviny.append(polozka)
-
-    st.subheader("2. Na jakou kuchyni máte chuť?")
-    vybrane_styly = []
-    with st.expander("🌍 Vybrat kulinářský styl / styl vaření"):
-        for styl in config.KULINARSKE_STYLY:
-            if st.checkbox(styl, key=f"styl_{styl}"):
-                vybrane_styly.append(styl)
-
-    st.subheader("3. Pro kolik porcí vařit?")
-    pocet_porci = st.slider("Počet porcí", min_value=1, max_value=12, value=6)
-
-    if st.button("🚀 Vygenerovat návrhy jídel", type="primary", key="btn_jidla"):
-        if not vybrane_suroviny:
-            st.warning("Vyber prosím alespoň jednu surovinu!")
-        else:
-            with st.spinner("AI šéfkuchař vymýšlí menu..."):
-                suroviny_str = ", ".join(vybrane_suroviny)
-                styl_str = ", ".join(vybrane_styly) if vybrane_styly else "libovolný pestrý mix"
-
-                vysledek = generuj_z_ai(config.PROMPT_PREHLED_SABLONA.format(
-                    suroviny=suroviny_str,
-                    styl=styl_str,
-                    porce=pocet_porci,
-                ))
-
-                if vysledek:
-                    recepty = parsuj_recepty_json(vysledek)
-                    if recepty:
-                        st.session_state["jidla_prehled"] = recepty
-                        st.session_state["jidla_suroviny"] = suroviny_str
-                        st.session_state["jidla_styly"] = styl_str
-                        st.session_state["jidla_porce"] = pocet_porci
-                        st.session_state.pop("jidla_detail", None)
-                        st.session_state["jidla_zobrazene"] = []
-                    else:
-                        st.error("Nepodařilo se zpracovat odpověď AI. Zkus to prosím znovu.")
-
-    zobraz_recepty(
-        prehled_key="jidla_prehled",
-        detail_key="jidla_detail",
-        zobrazene_key="jidla_zobrazene",
-        prompt_detail_fn=lambda nazev: config.PROMPT_DETAIL_SABLONA.format(
-            nazev_jidla=nazev,
-            suroviny=st.session_state.get("jidla_suroviny", ""),
-            styl=st.session_state.get("jidla_styly", ""),
-            porce=st.session_state.get("jidla_porce", 6),
-        ),
-        prefix_emailu="🍳 Recept:",
-    )
-
-# ==================== PEČENÍ ====================
-with tab_peceni:
-    st.subheader("1. Co chceš péct?")
-    vybrane_typy = []
-    with st.expander("🎂 Typ dezertu / pečiva"):
-        for typ in config.PECENI_TYPY_DEZERTY:
-            if st.checkbox(typ, key=f"peceni_typ_{typ}"):
-                vybrane_typy.append(typ)
-
-    st.subheader("2. Jaké máš ovoce?")
-    vybrane_ovoce = []
-    with st.expander("🍓 Ovoce"):
-        for ovoce in config.PECENI_OVOCE:
-            if st.checkbox(ovoce, key=f"peceni_ovoce_{ovoce}"):
-                vybrane_ovoce.append(ovoce)
-
-    st.subheader("3. Ostatní suroviny")
-    vybrane_ostatni = []
-    with st.expander("🧁 Ostatní"):
-        for surovina in config.PECENI_OSTATNI:
-            if st.checkbox(surovina, key=f"peceni_ostatni_{surovina}"):
-                vybrane_ostatni.append(surovina)
-
-    st.subheader("4. Náročnost")
-    narocnost = st.selectbox(
-        "Vyber náročnost receptů",
-        ["Bez omezení", "Snadné", "Střední", "Náročné"],
-        key="peceni_narocnost"
-    )
-
-    if st.button("🚀 Vygenerovat návrhy dezertů", type="primary", key="btn_peceni"):
-        if not vybrane_typy and not vybrane_ovoce and not vybrane_ostatni:
-            st.warning("Vyber prosím alespoň jeden typ dezertu nebo surovinu!")
-        else:
-            with st.spinner("Cukrář vymýšlí dezerty..."):
-                typ_str = ", ".join(vybrane_typy) if vybrane_typy else "libovolný dezert"
-                ovoce_str = ", ".join(vybrane_ovoce) if vybrane_ovoce else "žádné"
-                ostatni_str = ", ".join(vybrane_ostatni) if vybrane_ostatni else "základní suroviny"
-
-                vysledek = generuj_z_ai(config.PROMPT_PREHLED_PECENI_SABLONA.format(
-                    typ_dezertu=typ_str,
-                    ovoce=ovoce_str,
-                    ostatni=ostatni_str,
-                    narocnost=narocnost,
-                ))
-
-                if vysledek:
-                    recepty = parsuj_recepty_json(vysledek)
-                    if recepty:
-                        st.session_state["peceni_prehled"] = recepty
-                        st.session_state["peceni_typ"] = typ_str
-                        st.session_state["peceni_ovoce"] = ovoce_str
-                        st.session_state["peceni_ostatni"] = ostatni_str
-                        st.session_state.pop("peceni_detail", None)
-                        st.session_state["peceni_zobrazene"] = []
-                    else:
-                        st.error("Nepodařilo se zpracovat odpověď AI. Zkus to prosím znovu.")
-
-    zobraz_recepty(
-        prehled_key="peceni_prehled",
-        detail_key="peceni_detail",
-        zobrazene_key="peceni_zobrazene",
-        prompt_detail_fn=lambda nazev: config.PROMPT_DETAIL_PECENI_SABLONA.format(
-            nazev_jidla=nazev,
-            typ_dezertu=st.session_state.get("peceni_typ", ""),
-            ovoce=st.session_state.get("peceni_ovoce", ""),
-            ostatni=st.session_state.get("peceni_ostatni", ""),
-        ),
-        prefix_emailu="🎂 Recept:",
-    )
-
-# ==================== VÁNOCE ====================
-with tab_vanoce:
-    st.subheader("1. Jaké cukroví chceš péct?")
-    vybrane_typy_v = []
-    with st.expander("🍪 Typ cukroví"):
-        for typ in config.VANOCE_TYPY:
-            if st.checkbox(typ, key=f"vanoce_typ_{typ}"):
-                vybrane_typy_v.append(typ)
-
-    st.subheader("2. Hlavní surovina / chuť")
-    vybrane_chut = []
-    with st.expander("🌰 Chuť"):
-        for chut in config.VANOCE_CHUT:
-            if st.checkbox(chut, key=f"vanoce_chut_{chut}"):
-                vybrane_chut.append(chut)
-        vlastni_chut = st.text_input("✏️ Vlastní (např. tvaroh, višně...)", key="vanoce_chut_vlastni")
-        if vlastni_chut.strip():
-            vybrane_chut.append(vlastni_chut.strip())
-
-    st.subheader("3. Další nastavení")
-    narocnost_v = st.selectbox(
-        "💪 Náročnost",
-        ["Bez omezení", "Snadné", "Střední", "Náročné"],
-        key="vanoce_narocnost",
-    )
-    peceni_v = st.selectbox(
-        "🔥 Pečené / nepečené",
-        ["Nezáleží", "Pečené", "Nepečené"],
-        key="vanoce_peceni",
-    )
-    trvanlivost_v = st.selectbox(
-        "📦 Trvanlivost",
-        ["Nezáleží", "Na uležení (vydrží týdny)", "Čerstvé (hned)"],
-        key="vanoce_trvanlivost",
-    )
-
-    if st.button("🚀 Vygenerovat návrhy cukroví", type="primary", key="btn_vanoce"):
-        with st.spinner("Cukrář vymýšlí vánoční cukroví..."):
-            typ_str = ", ".join(vybrane_typy_v) if vybrane_typy_v else "libovolné vánoční cukroví"
-            chut_str = ", ".join(vybrane_chut) if vybrane_chut else "libovolná"
-
-            vysledek = generuj_z_ai(config.PROMPT_PREHLED_VANOCE_SABLONA.format(
-                typ=typ_str,
-                chut=chut_str,
-                narocnost=narocnost_v,
-                peceni=peceni_v,
-                trvanlivost=trvanlivost_v,
-            ))
-
-            if vysledek:
-                recepty = parsuj_recepty_json(vysledek)
-                if recepty:
-                    st.session_state["vanoce_prehled"] = recepty
-                    st.session_state["vanoce_typ"] = typ_str
-                    st.session_state["vanoce_chut"] = chut_str
-                    st.session_state.pop("vanoce_detail", None)
-                    st.session_state["vanoce_zobrazene"] = []
-                else:
-                    st.error("Nepodařilo se zpracovat odpověď AI. Zkus to prosím znovu.")
-
-    zobraz_recepty(
-        prehled_key="vanoce_prehled",
-        detail_key="vanoce_detail",
-        zobrazene_key="vanoce_zobrazene",
-        prompt_detail_fn=lambda nazev: config.PROMPT_DETAIL_VANOCE_SABLONA.format(
-            nazev_jidla=nazev,
-            typ=st.session_state.get("vanoce_typ", ""),
-            chut=st.session_state.get("vanoce_chut", ""),
-        ),
-        prefix_emailu="🎄 Recept:",
-    )
-
-# ==================== POLÉVKY ====================
-with tab_polevky:
-    st.subheader("1. Jaký typ polévky?")
-    vybrane_typy_pol = []
-    with st.expander("🍲 Typ polévky"):
-        for typ in config.POLEVKY_TYPY:
-            if st.checkbox(typ, key=f"polevka_typ_{typ}"):
-                vybrane_typy_pol.append(typ)
-
-    st.subheader("2. Jaké máš suroviny?")
-    vybrane_suroviny_pol = []
-    for kategorie, polozky in config.POLEVKY_SUROVINY.items():
-        with st.expander(kategorie):
-            for polozka in polozky:
-                if st.checkbox(polozka, key=f"polevka_surovina_{kategorie}_{polozka}"):
-                    vybrane_suroviny_pol.append(polozka)
-
-    st.subheader("3. Pro kolik porcí vařit?")
-    pocet_porci_pol = st.slider("Počet porcí", min_value=1, max_value=12, value=6, key="polevka_porce_slider")
-
-    if st.button("🚀 Vygenerovat návrhy polévek", type="primary", key="btn_polevky"):
-        if not vybrane_typy_pol and not vybrane_suroviny_pol:
-            st.warning("Vyber prosím alespoň typ polévky nebo surovinu!")
-        else:
-            with st.spinner("AI šéfkuchař vymýšlí polévky..."):
-                typ_str = ", ".join(vybrane_typy_pol) if vybrane_typy_pol else "libovolná polévka"
-                suroviny_str = ", ".join(vybrane_suroviny_pol) if vybrane_suroviny_pol else "základní suroviny"
-
-                vysledek = generuj_z_ai(config.PROMPT_PREHLED_POLEVKY_SABLONA.format(
-                    typ=typ_str,
-                    suroviny=suroviny_str,
-                    porce=pocet_porci_pol,
-                ))
-
-                if vysledek:
-                    recepty = parsuj_recepty_json(vysledek)
-                    if recepty:
-                        st.session_state["polevky_prehled"] = recepty
-                        st.session_state["polevky_typ"] = typ_str
-                        st.session_state["polevky_suroviny"] = suroviny_str
-                        st.session_state["polevky_porce"] = pocet_porci_pol
-                        st.session_state.pop("polevky_detail", None)
-                        st.session_state["polevky_zobrazene"] = []
-                    else:
-                        st.error("Nepodařilo se zpracovat odpověď AI. Zkus to prosím znovu.")
-
-    zobraz_recepty(
-        prehled_key="polevky_prehled",
-        detail_key="polevky_detail",
-        zobrazene_key="polevky_zobrazene",
-        prompt_detail_fn=lambda nazev: config.PROMPT_DETAIL_POLEVKY_SABLONA.format(
-            nazev_jidla=nazev,
-            typ=st.session_state.get("polevky_typ", ""),
-            suroviny=st.session_state.get("polevky_suroviny", ""),
-            porce=st.session_state.get("polevky_porce", 6),
-        ),
-        prefix_emailu="🥣 Recept:",
-    )
-
-# ==================== RECEPTY PODLE POPISU ====================
-with tab_popis:
-    st.subheader("Napiš, co si přeješ")
-    popis = st.text_area(
-        "Popiš, co máš v lednici nebo na co máš chuť",
-        placeholder="Např.: Mám kuřecí prsa, brambory a smetanu, chci něco rychlého do 30 minut...",
-        height=120,
-        key="popis_text",
-    )
-
-    if st.button("🚀 Vygenerovat návrhy jídel", type="primary", key="btn_popis"):
-        if not popis.strip():
-            st.warning("Napiš prosím, co si přeješ!")
-        else:
-            with st.spinner("AI šéfkuchař vymýšlí menu..."):
-                vysledek = generuj_z_ai(config.PROMPT_PREHLED_POPIS_SABLONA.format(popis=popis.strip()))
-
-                if vysledek:
-                    recepty = parsuj_recepty_json(vysledek)
-                    if recepty:
-                        st.session_state["popis_prehled"] = recepty
-                        st.session_state["popis_zadani"] = popis.strip()
-                        st.session_state.pop("popis_detail", None)
-                        st.session_state["popis_zobrazene"] = []
-                    else:
-                        st.error("Nepodařilo se zpracovat odpověď AI. Zkus to prosím znovu.")
-
-    zobraz_recepty(
-        prehled_key="popis_prehled",
-        detail_key="popis_detail",
-        zobrazene_key="popis_zobrazene",
-        prompt_detail_fn=lambda nazev: config.PROMPT_DETAIL_POPIS_SABLONA.format(
-            nazev_jidla=nazev,
-            popis=st.session_state.get("popis_zadani", ""),
-        ),
-        prefix_emailu="🍳 Recept:",
-    )
+if profil.startswith("Nela"):
+    st.title("👧 Nela — 1. třída")
+    tab_mat, tab_cteni = st.tabs(["➕ Matematika", "📖 Čtení"])
+    with tab_mat:
+        spust_matematiku("Nela", matematika.NELA_MODULY)
+    with tab_cteni:
+        spust_cteni()
+else:
+    st.title("🌈 Sára — 4. třída")
+    tab_mat, tab_cj = st.tabs(["🔢 Matematika", "✏️ Český jazyk"])
+    with tab_mat:
+        spust_matematiku("Sára", matematika.SARA_MODULY)
+    with tab_cj:
+        spust_cestinu()
